@@ -1,0 +1,58 @@
+erDiagram
+    GET_REACTION_REQUEST {
+        int token
+        int user_id
+        int text_id
+    }
+    USER_EVENT {
+        string type
+        int user_id
+    }
+    TEXT_EVENT {
+        string type
+        int text_id
+    }
+    LIKE_EVENT {
+        int token
+        int user_id
+        string type
+        int text_id
+        image icon
+    }
+    LIKE {
+        int like_id
+        int user_id
+        int text_id
+        date creation
+        date modification
+        image icon
+    }
+    REACTION {
+        int reaction_id
+        int text_id
+        int likes
+        int views
+        int comments
+    }
+
+    API-SERVICE ||--|| GET : calls
+    GET ||--o{ GET_REACTION_REQUEST : a
+    GET_REACTION_REQUEST }o--|| SERVICE : at
+
+    SERVICE ||--o{ REACTION : responses
+    REACTION }o--|| API-SERVICE : to
+
+    SERVICE ||--o{ LIKE : stores
+    LIKE }o--|| DATABASE : in
+
+    SERVICE ||--o{ REACTION : stores
+    REACTION }o--|| DATABASE : in
+
+    SERVICE ||--|{ USER_EVENT : reads
+    USER_EVENT ||--|| BROKER : from
+
+    SERVICE ||--|{ TEXT_EVENT : reads
+    TEXT_EVENT ||--|| BROKER : from
+
+    SERVICE ||--|{ LIKE_EVENT : reads
+    LIKE_EVENT ||--|| BROKER : from
