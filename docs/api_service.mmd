@@ -1,0 +1,179 @@
+erDiagram
+    CHANGE_INFO_REQUEST {
+        int token
+        int user_id
+        int age
+        string name
+        string lastname
+        string nickname
+        image avatar
+    }
+    REGISTER_REQUEST {
+        int age
+        string name
+        string lastname
+        string nickname
+        string password
+    }
+    AUTH_RESPONSE {
+        int token
+    }
+    CHANGE_PASSWORD_REQUEST {
+        int token
+        int user_id
+        string old_password
+        string new_password
+    }
+    DELETE_REQUEST {
+        int token
+        int user_id
+    }
+    LOGIN_REQUEST {
+        string nickname
+        string password
+    }
+    GET_USER_INFO_REQUEST {
+        int token
+        int user_id
+        string type
+        int requested_user_id
+    }
+    GET_USER_INFO_RESPONSE {
+        int user_id
+        int age
+        string name
+        string lastname
+        string nickname
+        date creation
+        date modification
+        image avatar
+    }
+    USER {
+        int user_id
+        int age
+        string name
+        string lastname
+        string nickname
+        string password
+        date creation
+        date modification
+        image avatar
+    }
+    USER_EVENT {
+        string type
+        int user_id
+    }
+        CREATE_TEXT_REQUEST {
+        int token
+        int user_id
+        int parent_text_id
+        string title
+        string text
+    }
+    MODIFY_TEXT_REQUEST {
+        int token
+        int user_id
+        int text_id
+        string title
+        string text
+    }
+    DELETE_TEXT_REQUEST {
+        int token
+        int user_id
+        int text_id
+    }
+    GET_USER_POSTS_REQUEST {
+        int token
+        int user_id
+        int requested_user_id
+    }
+    GET_COMMENTS_REQUEST {
+        int token
+        int user_id
+        int parent_text_id
+    }
+    GET_TEXT_RESPONSE {
+        int text_id
+        int user_id
+        int parent_text_id
+        string title
+        string text
+        date creation
+        date modification
+    }
+    TEXT {
+        int text_id
+        int user_id
+        int parent_text_id
+        string title
+        string text
+        date creation
+        date modification
+    }
+    USER_EVENT {
+        string type
+        int user_id
+    }
+    TEXT_EVENT {
+        string type
+        int text_id
+    }
+        GET_REACTION_REQUEST {
+        int token
+        int user_id
+        int text_id
+    }
+    USER_EVENT {
+        string type
+        int user_id
+    }
+    TEXT_EVENT {
+        string type
+        int text_id
+    }
+    LIKE_EVENT {
+        int token
+        int user_id
+        string type
+        int text_id
+        image icon
+    }
+    LIKE {
+        int like_id
+        int user_id
+        int text_id
+        date creation
+        date modification
+        image icon
+    }
+    REACTION {
+        int reaction_id
+        int text_id
+        int likes
+        int views
+        int comments
+    }
+    UI ||--|| REST-API : calls
+    REST-API ||--|| AUTH : routes
+    REST-API ||--|| CREATE : routes
+    REST-API ||--|| DELETE : routes
+    REST-API ||--|| GET : routes
+
+    AUTH ||--o{ USER : a
+    USER ||--|| USER-SERVICE : in
+
+    CREATE ||--o| TEXT : a
+    TEXT ||--|| POST-SERVICE : in
+
+    CREATE ||--o| LIKE : a
+    LIKE ||--|| BROKER : notify
+
+    GET ||--|{ REACTION : a
+    REACTION ||--|| REACTION-SERVICE : from
+
+    GET ||--|{ TEXT : a
+    GET ||--|{ USER : a
+
+    DELETE ||--o| TEXT : a
+    DELETE ||--o| LIKE_EVENT : publish
+    LIKE_EVENT ||--|| BROKER : into
