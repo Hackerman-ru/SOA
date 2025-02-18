@@ -1,0 +1,153 @@
+specification {
+    element person {
+        style {
+            color green
+            shape person
+        }
+    }
+    element enterprise {
+        style {
+            opacity 15%
+        }
+    }
+    element context {
+        style {
+            opacity 20%
+        }
+    }
+    element container {
+        style {
+            opacity 25%
+        }
+    }
+    element component
+    element database {
+        style {
+            shape storage
+        }
+    }
+
+    color pink #F0C0CB
+}
+
+model {
+    user = person "Пользователь" {
+        description "Пользователь Mailgram"
+    }
+    mailgram = enterprise "Mailgram Inc." {
+        ui = context "Mailgram UI" {
+            description "Пользовательский интерфейс"
+            style {
+                color pink
+            }
+
+            webapp = container "Веб-приложение" {
+                style {
+                    color pink
+                }
+            }
+            mobileapp = container "Мобильное приложение" {
+                style {
+                    shape mobile
+                    color pink
+                }
+            }
+            spa = container "Одностраничное приложение" {
+                style {
+                    shape browser
+                    color pink
+                }
+            }
+        }
+        system = context "Mailgram System" {
+            description "Внутренние системы"
+
+            api = container "API Gateway" {
+                description "Маршрутизация запросов и управление доступом"
+            }
+            redis = database "Redis" {
+                description "Кэширование и хранение сессий"
+                technology "In-memory data store"
+            }
+
+            userService = container "User Service" {
+                description "Управление пользователями и аутентификация"
+            }
+            postgresDb = database "PostgreSQL" {
+                description "Хранение данных пользователей"
+                technology "Database"
+            }
+
+            postService = container "Post service" {
+                description "Управление постами и комментариями"
+            }
+            cassandraDb = database "Cassandra" {
+                description "Хранение постов и комментариев"
+                technology "Database"
+            }
+
+            reactionService = container "Reaction service" {
+                description "Управление реакциями пользователей"
+            }
+            clickhouse = database "ClickHouse" {
+                description "Хранение статистики о постах и комментариях"
+                technology "Database"
+            }
+
+            rabbit = container "RabbitMQ" {
+                description "Обмен событиями между сервисами"
+                technology "Message Broker"
+                style {
+                    shape queue
+                }
+            }
+        }
+
+        user -> ui "Использует"
+        user -> mailgram.ui.mobileapp "Смотрит посты, комменты и реакции" "HTTPS"
+        user -> mailgram.ui.spa "Смотрит посты, комменты и реакции" "HTTPS"
+        user -> mailgram.ui.webapp "Посещает по mailgram.com" "HTTPS"
+
+        mailgram.ui -> mailgram.system "Использует"
+        mailgram.ui -> mailgram.system.api "Вызывыет" "JSON/HTTPS"
+        mailgram.ui.mobileapp -> mailgram.system.api "Вызывыет" "JSON/HTTPS"
+        mailgram.ui.spa -> mailgram.system.api "Вызывает" "JSON/HTTPS"
+        mailgram.ui.webapp -> mailgram.ui.spa "Перенаправляет" "HTTPS"
+
+        mailgram.system.api -> mailgram.system.userService "Маршрутизирует" "JSON/HTTPS"
+        mailgram.system.api -> mailgram.system.postService "Маршрутизирует" "JSON/HTTPS"
+        mailgram.system.api -> mailgram.system.reactionService "Маршрутизирует" "JSON/HTTPS"
+
+        mailgram.system.api -> mailgram.system.redis "Кеширует" "Redis Protocol"
+        mailgram.system.userService -> mailgram.system.postgresDb "Читает/Пишет" "SQL"
+        mailgram.system.postService -> mailgram.system.cassandraDb "Читает/Пишет" "CQL"
+        mailgram.system.reactionService -> mailgram.system.clickhouse "Читает/Пишет" "CH-SQL"
+
+        mailgram.system.api -> mailgram.system.rabbit "Публикует" "reaction_events"
+        mailgram.system.userService -> mailgram.system.rabbit "Публикует" "user_events"
+        mailgram.system.postService -> mailgram.system.rabbit "Публикует/Подписывается" "user_events, post_events"
+        mailgram.system.reactionService -> mailgram.system.rabbit "Подписывается" "post_events, reaction_events"
+    }
+}
+
+views {
+    view index of mailgram {
+        title "Mailgram - Landscape"
+        include *
+    }
+
+    view ui of mailgram.ui {
+        title "Mailgram UI - Containers"
+        include *, api
+    }
+
+    view system of mailgram.system {
+        title "Mailgram System - Containers"
+        include *
+    }
+
+    view user of user {
+        include *, user -> mailgram.*, user -> ui.*
+        exclude webapp
+    }
+}

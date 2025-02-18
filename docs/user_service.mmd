@@ -1,0 +1,101 @@
+erDiagram
+    CHANGE_INFO_REQUEST {
+        int token
+        int user_id
+        int age
+        string name
+        string lastname
+        string nickname
+        image avatar
+    }
+    REGISTER_REQUEST {
+        int age
+        string name
+        string lastname
+        string nickname
+        string password
+    }
+    AUTH_RESPONSE {
+        string token
+    }
+    CHANGE_PASSWORD_REQUEST {
+        int token
+        int user_id
+        string old_password
+        string new_password
+    }
+    DELETE_REQUEST {
+        int token
+        int user_id
+    }
+    LOGIN_REQUEST {
+        string nickname
+        string password
+    }
+    GET_USER_INFO_REQUEST {
+        int token
+        int user_id
+        string type
+        int requested_user_id
+    }
+    GET_USER_INFO_RESPONSE {
+        int user_id
+        int age
+        string name
+        string lastname
+        string nickname
+        date creation
+        date modification
+        image avatar
+    }
+    USER {
+        int user_id
+        int age
+        string name
+        string lastname
+        string nickname
+        string password
+        date creation
+        date modification
+        image avatar
+    }
+    USER_EVENT {
+        string type
+        int user_id
+    }
+
+    API-SERVICE ||--|| REGISTER : calls
+    REGISTER ||--|{ REGISTER_REQUEST : by
+    REGISTER_REQUEST }|--|| SERVICE : in
+
+    API-SERVICE ||--|| DELETE : calls
+    DELETE ||--|{ DELETE_REQUEST : by
+    DELETE_REQUEST }|--|| SERVICE : in
+
+    API-SERVICE ||--|| LOGIN : calls
+    LOGIN ||--|{ LOGIN_REQUEST : by
+    LOGIN_REQUEST }|--|| SERVICE : in
+
+    API-SERVICE ||--|| CHANGE_PASSWORD : calls
+    CHANGE_PASSWORD ||--|{ CHANGE_PASSWORD_REQUEST : by
+    CHANGE_PASSWORD_REQUEST }|--|| SERVICE : in
+
+    API-SERVICE ||--|| GET : calls
+    GET ||--|| GET_USER_INFO_REQUEST : a
+    GET_USER_INFO_REQUEST ||--|| SERVICE : in
+
+    API-SERVICE ||--|| CHANGE_INFO : calls
+    CHANGE_INFO ||--|| CHANGE_INFO_REQUEST : a
+    CHANGE_INFO_REQUEST ||--|| SERVICE : in
+
+    SERVICE ||--|{ GET_USER_INFO_RESPONSE : responses
+    GET_USER_INFO_RESPONSE }|--|| API-SERVICE : to
+
+    SERVICE ||--|| AUTH_RESPONSE : responses
+    AUTH_RESPONSE ||--|| API-SERVICE : to
+
+    SERVICE ||--o{ USER : "stores and retrieves"
+    USER }o--|| DATABASE : in
+
+    SERVICE ||--|{ USER_EVENT : publish
+    USER_EVENT ||--|| BROKER : in

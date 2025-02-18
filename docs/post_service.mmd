@@ -1,0 +1,88 @@
+erDiagram
+    CREATE_TEXT_REQUEST {
+        int token
+        int user_id
+        int parent_text_id
+        string title
+        string text
+    }
+    MODIFY_TEXT_REQUEST {
+        int token
+        int user_id
+        int text_id
+        string title
+        string text
+    }
+    DELETE_TEXT_REQUEST {
+        int token
+        int user_id
+        int text_id
+    }
+    GET_USER_POSTS_REQUEST {
+        int token
+        int user_id
+        int requested_user_id
+    }
+    GET_COMMENTS_REQUEST {
+        int token
+        int user_id
+        int parent_text_id
+    }
+    GET_TEXT_RESPONSE {
+        int text_id
+        int user_id
+        int parent_text_id
+        string title
+        string text
+        date creation
+        date modification
+    }
+    TEXT {
+        int text_id
+        int user_id
+        int parent_text_id
+        string title
+        string text
+        date creation
+        date modification
+    }
+    USER_EVENT {
+        string type
+        int user_id
+    }
+    TEXT_EVENT {
+        string type
+        int text_id
+    }
+
+    API-SERVICE ||--|| CREATE : calls
+    CREATE ||--|{ CREATE_TEXT_REQUEST  : a
+    CREATE_TEXT_REQUEST }|--|| SERVICE : in
+
+    API-SERVICE ||--|| MODIFY : calls
+    MODIFY ||--|{ MODIFY_TEXT_REQUEST  : a
+    MODIFY_TEXT_REQUEST }|--|| SERVICE : in
+
+    API-SERVICE ||--|| DELETE : calls
+    DELETE ||--|{ DELETE_TEXT_REQUEST  : a
+    DELETE_TEXT_REQUEST }|--|| SERVICE : in
+
+    API-SERVICE ||--|| GET : calls
+    GET ||--|| GET_COMMENTS_REQUEST : a
+    GET_COMMENTS_REQUEST ||--|| SERVICE : in
+
+    API-SERVICE ||--|| GET : calls
+    GET ||--|| GET_USER_POSTS_REQUEST : a
+    GET_USER_POSTS_REQUEST ||--|| SERVICE : in
+
+    SERVICE ||--o{ GET_TEXT_RESPONSE : responses
+    GET_TEXT_RESPONSE }o--|| API-SERVICE : to
+
+    SERVICE ||--o{ TEXT : "stores and retrieves"
+    TEXT }o--|| DATABASE : in
+
+    SERVICE ||--|{ TEXT_EVENT : publish
+    TEXT_EVENT ||--|| BROKER : in
+
+    SERVICE ||--|{ USER_EVENT : reads
+    USER_EVENT ||--|| BROKER : from
