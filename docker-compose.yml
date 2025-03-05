@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: user_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - auth_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -d user_db -U username" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  user_service:
+    build: ./user_service
+    environment:
+      - DATABASE_URL=postgres://username:password@db:5432/user_db
+    volumes:
+      - ./user_service/signature.pem:/tmp/signature.pem
+      - ./user_service/signature.pub:/tmp/signature.pub
+    command: [ "--private", "/tmp/signature.pem", "--public", "/tmp/signature.pub", "--port", "8081" ]
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    networks:
+      - auth_network
+
+  proxy_service:
+    build: ./proxy_service
+    depends_on:
+      - user_service
+    ports:
+      - "8080:8080"
+    networks:
+      - auth_network
+
+volumes:
+  postgres_data:
+
+
+networks:
+  auth_network:
