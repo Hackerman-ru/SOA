@@ -8,7 +8,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
             .route("/login", web::post().to(login))
             .route("/logout", web::post().to(logout))
             .route("/profile/my", web::put().to(update_my_profile))
-            .route("/profile/my", web::put().to(get_my_profile))
+            .route("/profile/my", web::get().to(get_my_profile))
             .route("/profile/{user_id}", web::get().to(get_profile)),
     );
 }

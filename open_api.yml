@@ -1,8 +1,7 @@
 openapi: 3.0.0
 info:
-  title: User API
+  title: Mailgram API
   version: 1.0.0
-  description: API для управления пользователями, включая регистрацию, авторизацию и управление профилем.
 
 servers:
   - url: http://localhost:{port}/api/v1
@@ -12,161 +11,85 @@ servers:
         default: 8080
         description: Порт, на котором запущен сервер.
 
+tags:
+  - name: Auth
+    description: User authentication
+  - name: Profile
+    description: User profile management
+  - name: Posts
+    description: Post management
+
 paths:
-  /register:
+  /api/v1/user/register:
     post:
-      summary: Регистрация нового пользователя
+      tags: [Auth]
+      summary: Register new user
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegisterData'
+              $ref: "#/components/schemas/RegisterData"
       responses:
-        '200':
-          description: Пользователь успешно зарегистрирован
+        "200":
+          description: Successfully registered
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  id:
-                    type: integer
-        '409':
-          description: Пользователь с таким именем или email уже существует
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-        '500':
-          description: Ошибка сервера при регистрации пользователя
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          description: Invalid input
 
-  /login:
+  /api/v1/user/login:
     post:
-      summary: Авторизация пользователя
+      tags: [Auth]
+      summary: User login
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginData'
+              $ref: "#/components/schemas/LoginData"
       responses:
-        '200':
-          description: Успешная авторизация
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
+        "200":
+          description: Successfully logged in
           headers:
             Set-Cookie:
               schema:
                 type: string
-              example: jwt=token; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400
-        '401':
-          description: Неверные учетные данные
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-        '404':
-          description: Пользователь не найден
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-        '500':
-          description: Ошибка сервера при авторизации
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
+                example: jwt=abcde12345; Path=/; HttpOnly
+        "401":
+          description: Invalid credentials
 
-  /logout:
+  /api/v1/user/logout:
     post:
-      summary: Выход из системы
-      security:
-        - cookieAuth: []
+      tags: [Auth]
+      summary: User logout
       responses:
-        '200':
-          description: Успешный выход из системы
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
+        "200":
+          description: Successfully logged out
           headers:
             Set-Cookie:
               schema:
                 type: string
-              example: jwt=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0
+                example: jwt=; Path=/; HttpOnly; Max-Age=0
 
-  /profile/my:
+  /api/v1/user/profile/my:
     get:
-      summary: Получение профиля текущего пользователя
+      tags: [Profile]
+      summary: Get current user profile
       security:
         - cookieAuth: []
       responses:
-        '200':
-          description: Профиль пользователя успешно получен
+        "200":
+          description: Profile data
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserResponse'
-        '401':
-          description: Неавторизованный доступ
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-        '404':
-          description: Пользователь не найден
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-        '500':
-          description: Ошибка сервера при получении профиля
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
+                $ref: "#/components/schemas/UserResponse"
     put:
-      summary: Обновление профиля текущего пользователя
+      tags: [Profile]
+      summary: Update current user profile
       security:
         - cookieAuth: []
       requestBody:
@@ -174,70 +97,172 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UserUpdateRequest'
+              $ref: "#/components/schemas/UserUpdateRequest"
       responses:
-        '200':
-          description: Профиль пользователя успешно обновлен
+        "200":
+          description: Updated profile
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserResponse'
-        '401':
-          description: Неавторизованный доступ
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-        '500':
-          description: Ошибка сервера при обновлении профиля
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
+                $ref: "#/components/schemas/UserResponse"
 
-  /profile/{user_id}:
+  /api/v1/user/profile/{user_id}:
     get:
-      summary: Получение профиля пользователя по ID
+      tags: [Profile]
+      summary: Get user profile by ID
       parameters:
         - name: user_id
           in: path
           required: true
           schema:
-            type: integer
+            type: string
+            format: uuid
       responses:
-        '200':
-          description: Профиль пользователя успешно получен
+        "200":
+          description: Profile data
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserResponse'
-        '404':
-          description: Пользователь не найден
+                $ref: "#/components/schemas/UserResponse"
+
+  /api/v1/post/create:
+    post:
+      tags: [Posts]
+      summary: Create new post
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePostRequest"
+      responses:
+        "201":
+          description: Post created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+
+  /api/v1/post/update:
+    put:
+      tags: [Posts]
+      summary: Update existing post
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePostRequest"
+      responses:
+        "200":
+          description: Post updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+
+  /api/v1/post/get:
+    get:
+      tags: [Posts]
+      summary: Get post details
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Post data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+
+  /api/v1/post/delete:
+    delete:
+      tags: [Posts]
+      summary: Delete post
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeletePostRequest"
+      responses:
+        "200":
+          description: Post deleted
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  error:
-                    type: string
-        '500':
-          description: Ошибка сервера при получении профиля
+                  success:
+                    type: boolean
+
+  /api/v1/post/list:
+    get:
+      tags: [Posts]
+      summary: List posts
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: tags
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: page_token
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of posts
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
+                $ref: "#/components/schemas/ListPostsResponse"
 
 components:
   schemas:
+    LoginData:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
     RegisterData:
       type: object
       required:
@@ -251,57 +276,149 @@ components:
           type: string
         email:
           type: string
-
-    LoginData:
-      type: object
-      required:
-        - username
-        - password
-      properties:
-        username:
-          type: string
-        password:
-          type: string
+          format: email
 
     UserUpdateRequest:
       type: object
       properties:
         email:
           type: string
+          format: email
+          nullable: true
         first_name:
           type: string
+          nullable: true
         last_name:
           type: string
+          nullable: true
         date_of_birth:
           type: string
           format: date
+          nullable: true
         phone_number:
           type: string
+          nullable: true
 
     UserResponse:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
         username:
           type: string
         email:
           type: string
+          format: email
         first_name:
           type: string
+          nullable: true
         last_name:
           type: string
+          nullable: true
         date_of_birth:
           type: string
           format: date
+          nullable: true
         phone_number:
           type: string
+          nullable: true
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+
+    CreatePostRequest:
+      type: object
+      required:
+        - title
+        - creator_id
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        creator_id:
+          type: string
+          format: uuid
+        is_private:
+          type: boolean
+          default: false
+        tags:
+          type: array
+          items:
+            type: string
+
+    UpdatePostRequest:
+      type: object
+      required:
+        - id
+        - user_id
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        is_private:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+
+    DeletePostRequest:
+      type: object
+      required:
+        - id
+        - user_id
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+          format: uuid
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        creator_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        is_private:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+
+    ListPostsResponse:
+      type: object
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Post"
+        next_page_token:
+          type: string
 
   securitySchemes:
     cookieAuth:

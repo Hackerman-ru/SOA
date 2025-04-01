@@ -1,5 +1,6 @@
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginData {
@@ -25,7 +26,7 @@ pub struct UserUpdateRequest {
 
 #[derive(Debug, Serialize)]
 pub struct UserResponse {
-    pub id: i32,
+    pub id: Uuid,
     pub username: String,
     pub email: String,
     pub first_name: Option<String>,

@@ -2,12 +2,16 @@
 FROM rust:1.85 AS builder
 
 # Устанавливаем рабочую директорию
-WORKDIR /usr/src/proxy_service
+WORKDIR /usr/src/post_service
 
 # Копируем зависимости и исходный код
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml Cargo.lock build.rs ./
 COPY src ./src
 COPY proto ./proto
+
+# Устанавливаем Protoc
+RUN apt update && apt install --no-install-recommends --assume-yes \
+    protobuf-compiler
 
 # Собираем проект
 RUN cargo build --release
@@ -18,18 +22,11 @@ FROM debian:bookworm-slim
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Устанавливаем необходимые зависимости
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    libssl3 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
 # Копируем собранный бинарник из builder-образа
-COPY --from=builder /usr/src/proxy_service/target/release/proxy_service .
+COPY --from=builder /usr/src/post_service/target/release/post_service .
 
 # Указываем порт, который будет использовать приложение
-EXPOSE 8080
+EXPOSE 8082
 
 # Команда для запуска приложения
-ENTRYPOINT ["./proxy_service"]
+ENTRYPOINT ["./post_service"]

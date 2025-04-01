@@ -1,12 +1,12 @@
 services:
   db:
-    image: postgres:13
+    image: postgres:latest
     environment:
       POSTGRES_USER: username
       POSTGRES_PASSWORD: password
       POSTGRES_DB: user_db
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data:rw
     ports:
       - "5432:5432"
     networks:
@@ -32,19 +32,62 @@ services:
       - "8081:8081"
     networks:
       - auth_network
+      - proxy_network
+  
+  cassandra:
+    image: cassandra:latest
+    environment:
+      - CASSANDRA_START_RPC=true
+      - CASSANDRA_RPC_ADDRESS=0.0.0.0
+      - CASSANDRA_LISTEN_ADDRESS=auto
+      - CASSANDRA_CLUSTER_NAME=my-cluster
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_DC=my-datacenter-1f
+    volumes:
+      - cassandra_data:/var/lib/cassandra:rw
+    ports:
+      - "7000:7000"
+      - "9042:9042"
+    networks:
+      - post_network
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  post_service:
+    build: ./post_service
+    environment:
+      - NODE_ADDRESS=cassandra:9042
+    command: ["--port", "8082"]
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    ports:
+      - "8082:8082"
+    networks:
+      - post_network
+      - proxy_network
 
   proxy_service:
     build: ./proxy_service
+    volumes:
+      - ./user_service/signature.pub:/tmp/signature.pub
+    command: ["--post", "http://post_service:8082","--user", "http://user_service:8081", "--public", "/tmp/signature.pub", "--port", "8080"]
     depends_on:
       - user_service
+      - post_service
     ports:
       - "8080:8080"
     networks:
-      - auth_network
+      - proxy_network
 
 volumes:
   postgres_data:
-
+  cassandra_data:
 
 networks:
   auth_network:
+  post_network:
+  proxy_network:

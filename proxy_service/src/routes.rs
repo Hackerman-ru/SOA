@@ -1,0 +1,57 @@
+use crate::{
+    handlers::{create_post, delete_post, get_post, list_posts, update_post},
+    server_data::ServerData,
+};
+use actix_web::{Error, HttpRequest, HttpResponse, web};
+use awc::Client;
+use serde_json::json;
+
+async fn proxy_user_service(
+    server_data: web::Data<ServerData>,
+    req: HttpRequest,
+    body: web::Bytes,
+    tail: web::Path<String>,
+) -> Result<HttpResponse, Error> {
+    let client = Client::default();
+
+    let target_path = format!("/api/v1/{}", tail);
+
+    let target_url = format!("{}{}", server_data.user_service_url, target_path);
+
+    let mut proxy_request = client.request_from(&target_url, req.head());
+
+    for (name, value) in req.headers() {
+        proxy_request = proxy_request.insert_header((name.clone(), value.clone()));
+    }
+
+    let mut response = match proxy_request.send_body(body).await {
+        Ok(res) => res,
+        Err(e) => {
+            return Ok(HttpResponse::InternalServerError().json(json!({"error":e.to_string()})));
+        }
+    };
+
+    let mut client_resp = HttpResponse::build(response.status());
+    for (name, value) in response.headers().iter() {
+        client_resp.insert_header((name.clone(), value.clone()));
+    }
+
+    Ok(client_resp.body(response.body().await?))
+}
+
+pub fn init_routes(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::scope("/api/v1")
+            // Проксирование запросов /user/*
+            .service(web::resource("/user/{tail:.*}").to(proxy_user_service))
+            // Обработка запросов /post/*
+            .service(
+                web::scope("/post")
+                    .route("/create", web::post().to(create_post))
+                    .route("/update", web::put().to(update_post))
+                    .route("/get", web::get().to(get_post))
+                    .route("/delete", web::delete().to(delete_post))
+                    .route("/list", web::get().to(list_posts)),
+            ),
+    );
+}

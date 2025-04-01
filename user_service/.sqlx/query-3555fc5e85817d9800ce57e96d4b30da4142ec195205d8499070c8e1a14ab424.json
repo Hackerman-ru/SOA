@@ -1,10 +1,15 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT password_hash FROM users WHERE username = $1",
+  "query": "SELECT id, password_hash FROM users WHERE username = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
         "name": "password_hash",
         "type_info": "Varchar"
       }
@@ -15,8 +20,9 @@
       ]
     },
     "nullable": [
+      false,
       false
     ]
   },
-  "hash": "beb06a0b447d684443fd6f385375dad912db9c9da70db9b6c6cca9cf3ca8fc70"
+  "hash": "3555fc5e85817d9800ce57e96d4b30da4142ec195205d8499070c8e1a14ab424"
 }

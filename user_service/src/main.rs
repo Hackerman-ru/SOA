@@ -32,7 +32,7 @@ async fn main() -> std::io::Result<()> {
     let db_pool = web::Data::new(get_db_pool().await);
     let keys = web::Data::new(Keys::new(args.public, args.private).await);
 
-    println!("Running user-server on 0.0.0.0:{}", args.port);
+    println!("Running user-service on 0.0.0.0:{}", args.port);
 
     HttpServer::new(move || {
         App::new()
