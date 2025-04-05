@@ -859,7 +859,7 @@ mod tests {
         data.mock_cassandra
             .expect_query_paged()
             .with(
-                eq("SELECT * FROM post_service.posts"),
+                eq("SELECT * FROM post_service.posts WHERE is_private = false ALLOW FILTERING"),
                 eq(query_values!()),
                 eq(10),
                 eq(None),
@@ -893,7 +893,7 @@ mod tests {
         data.mock_cassandra
             .expect_query_paged()
             .with(
-                eq("SELECT * FROM post_service.posts WHERE tags CONTAINS ? ALLOW FILTERING"),
+                eq("SELECT * FROM post_service.posts WHERE is_private = false AND tags CONTAINS ? ALLOW FILTERING"),
                 eq(query_values!("test".to_string())),
                 eq(10),
                 eq(None),
