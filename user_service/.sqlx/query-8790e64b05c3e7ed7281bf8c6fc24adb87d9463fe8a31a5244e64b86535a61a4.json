@@ -1,12 +1,17 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO users (username, password_hash, email) VALUES ($1, $2, $3) RETURNING id",
+  "query": "INSERT INTO users (username, password_hash, email) VALUES ($1, $2, $3) RETURNING id, created_at",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
         "name": "id",
         "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamp"
       }
     ],
     "parameters": {
@@ -17,8 +22,9 @@
       ]
     },
     "nullable": [
+      false,
       false
     ]
   },
-  "hash": "389adfeac4c92646c6294ca089fd8926c2e99a1e6fbff03073fb331357fcf9e9"
+  "hash": "8790e64b05c3e7ed7281bf8c6fc24adb87d9463fe8a31a5244e64b86535a61a4"
 }

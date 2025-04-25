@@ -1,5 +1,8 @@
 use crate::{
-    handlers::{create_post, delete_post, get_post, list_posts, update_post},
+    handlers::{
+        comment_post, create_post, delete_post, get_comments, get_post, like_post, list_posts,
+        update_post, view_post,
+    },
     server_data::ServerData,
 };
 use actix_web::{Error, HttpRequest, HttpResponse, web};
@@ -42,16 +45,18 @@ async fn proxy_user_service(
 pub fn init_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/v1")
-            // Проксирование запросов /user/*
             .service(web::resource("/user/{tail:.*}").to(proxy_user_service))
-            // Обработка запросов /post/*
             .service(
                 web::scope("/post")
                     .route("/create", web::post().to(create_post))
                     .route("/update", web::put().to(update_post))
                     .route("/get", web::get().to(get_post))
                     .route("/delete", web::delete().to(delete_post))
-                    .route("/list", web::get().to(list_posts)),
+                    .route("/list", web::get().to(list_posts))
+                    .route("/comment", web::post().to(comment_post))
+                    .route("/comments", web::get().to(get_comments))
+                    .route("/like", web::post().to(like_post))
+                    .route("/view", web::post().to(view_post)),
             ),
     );
 }

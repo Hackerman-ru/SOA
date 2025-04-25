@@ -1,4 +1,3 @@
-// src/handlers/post_handlers.rs
 use crate::post_service::PostService;
 use crate::{posts::*, server_data::ServerData};
 use actix_web::{HttpRequest, HttpResponse, Responder, web};
@@ -74,7 +73,7 @@ pub async fn create_post(
     input: web::Json<CreatePostRequest>,
     req: HttpRequest,
 ) -> impl Responder {
-    let request = input.0;
+    let request = input.into_inner();
     let creator_id = match Uuid::parse_str(&request.creator_id) {
         Ok(id) => id,
         Err(_) => {
@@ -100,7 +99,7 @@ pub async fn update_post(
     input: web::Json<UpdatePostRequest>,
     req: HttpRequest,
 ) -> impl Responder {
-    let request = input.0;
+    let request = input.into_inner();
     let user_id = match Uuid::parse_str(&request.user_id) {
         Ok(id) => id,
         Err(_) => {
@@ -126,7 +125,7 @@ pub async fn get_post(
     input: web::Json<GetPostRequest>,
     req: HttpRequest,
 ) -> impl Responder {
-    let request = input.0;
+    let request = input.into_inner();
     let user_id = match Uuid::parse_str(&request.user_id) {
         Ok(id) => id,
         Err(_) => {
@@ -152,7 +151,7 @@ pub async fn delete_post(
     input: web::Json<DeletePostRequest>,
     req: HttpRequest,
 ) -> impl Responder {
-    let request = input.0;
+    let request = input.into_inner();
     let user_id = match Uuid::parse_str(&request.user_id) {
         Ok(id) => id,
         Err(_) => {
@@ -178,7 +177,7 @@ pub async fn list_posts(
     input: web::Json<ListPostsRequest>,
     req: HttpRequest,
 ) -> impl Responder {
-    let request = input.0;
+    let request = input.into_inner();
     let user_id = match Uuid::parse_str(&request.user_id) {
         Ok(id) => id,
         Err(_) => {
@@ -197,6 +196,115 @@ pub async fn list_posts(
             "posts": response.posts,
             "next_page_token": response.next_page_token
         })),
+        Err(status) => convert_err(status),
+    }
+}
+
+pub async fn comment_post(
+    post_service: web::Data<PostService>,
+    server_data: web::Data<ServerData>,
+    input: web::Json<CommentPostRequest>,
+    req: HttpRequest,
+) -> impl Responder {
+    let request = input.into_inner();
+    let user_id = match Uuid::parse_str(&request.user_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest()
+                .json(json!({ "proxy-service/error": "Invalid UUID in user_id" }));
+        }
+    };
+
+    if let Err(response) = check_jwt(user_id, &server_data, &req) {
+        return response;
+    }
+
+    let mut client = post_service.get_ref().clone();
+
+    let response = client.comment_post(request).await;
+    match response {
+        Ok(response) => HttpResponse::Ok().json(response.comment),
+        Err(status) => convert_err(status),
+    }
+}
+
+pub async fn get_comments(
+    post_service: web::Data<PostService>,
+    server_data: web::Data<ServerData>,
+    input: web::Json<GetCommentsRequest>,
+    req: HttpRequest,
+) -> impl Responder {
+    let request = input.into_inner();
+    let user_id = match Uuid::parse_str(&request.user_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest()
+                .json(json!({ "proxy-service/error": "Invalid UUID in user_id" }));
+        }
+    };
+    if let Err(response) = check_jwt(user_id, &server_data, &req) {
+        return response;
+    }
+    let mut client = post_service.get_ref().clone();
+
+    let response = client.get_comments(request).await;
+    match response {
+        Ok(response) => HttpResponse::Ok().json(json!({
+            "comments": response.comments,
+            "next_page_token": response.next_page_token
+        })),
+        Err(status) => convert_err(status),
+    }
+}
+
+pub async fn like_post(
+    server_data: web::Data<ServerData>,
+    post_service: web::Data<PostService>,
+    input: web::Json<LikePostRequest>,
+    req: HttpRequest,
+) -> impl Responder {
+    let request = input.into_inner();
+    let user_id = match Uuid::parse_str(&request.user_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest()
+                .json(json!({ "proxy-service/error": "Invalid UUID in user_id" }));
+        }
+    };
+    if let Err(response) = check_jwt(user_id, &server_data, &req) {
+        return response;
+    }
+    let mut client = post_service.get_ref().clone();
+
+    let response = client.like_post(request).await;
+    match response {
+        Ok(response) => HttpResponse::Ok().json(json!({ "success": response.success })),
+        Err(status) => convert_err(status),
+    }
+}
+
+pub async fn view_post(
+    server_data: web::Data<ServerData>,
+    post_service: web::Data<PostService>,
+    input: web::Json<ViewPostRequest>,
+    req: HttpRequest,
+) -> impl Responder {
+    let request = input.into_inner();
+    let user_id = match Uuid::parse_str(&request.user_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest()
+                .json(json!({ "proxy-service/error": "Invalid UUID in user_id" }));
+        }
+    };
+    if let Err(response) = check_jwt(user_id, &server_data, &req) {
+        return response;
+    }
+    let mut client = post_service.get_ref().clone();
+
+    let response = client.view_post(request).await;
+    match response {
+        Ok(response) => HttpResponse::Ok().json(json!({ "success": response.success })),
         Err(status) => convert_err(status),
     }
 }

@@ -19,7 +19,7 @@ thiserror = "1.0"
 mockall = "0.11"
 async-trait = "0.1"
 base64 = "0.22.1"
-dotenv = "0.15"
+rdkafka = { version = "0.25" }
 
 [lib]
 name = "post_service_lib"
