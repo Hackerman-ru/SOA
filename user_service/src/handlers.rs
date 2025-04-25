@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{
     models::{LoginData, RegisterData, UserResponse, UserUpdateRequest},
     server_data::Keys,
@@ -8,6 +10,7 @@ use actix_web::{
     web,
 };
 use bcrypt::{DEFAULT_COST, hash, verify};
+use rdkafka::producer::{FutureProducer, FutureRecord};
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -53,12 +56,13 @@ fn validate_jwt(token: &String, keys: &Keys) -> Result<Uuid, HttpResponse> {
 }
 
 pub async fn register(
+    kafka_producer: web::Data<FutureProducer>,
     register_data: web::Json<RegisterData>,
     db_pool: web::Data<PgPool>,
 ) -> impl Responder {
     let password_hash = hash(register_data.password.clone(), DEFAULT_COST).unwrap();
     let insert_result = sqlx::query!(
-        "INSERT INTO users (username, password_hash, email) VALUES ($1, $2, $3) RETURNING id",
+        "INSERT INTO users (username, password_hash, email) VALUES ($1, $2, $3) RETURNING id, created_at",
         register_data.username,
         password_hash,
         register_data.email
@@ -67,8 +71,29 @@ pub async fn register(
     .await;
 
     match insert_result {
-        Ok(record) => HttpResponse::Ok()
-            .json(json!({ "message": "User registered successfully", "id": record.id })),
+        Ok(record) => {
+            let payload = json!({
+                "user_id": &record.id,
+                "timestamp": &record.created_at,
+            });
+
+            let key_str = record.id.to_string();
+            let payload_str = payload.to_string();
+            let kafka_record = FutureRecord::to("register")
+                .payload(&payload_str)
+                .key(&key_str);
+
+            match kafka_producer
+                .send(kafka_record, Duration::from_secs(3))
+                .await
+            {
+                Ok(_) => HttpResponse::Ok()
+                    .json(json!({ "message": "User registered successfully", "id": record.id })),
+                Err((e, _)) => {
+                    HttpResponse::InternalServerError().json(json!({ "error": e.to_string() }))
+                }
+            }
+        }
         Err(sqlx::Error::Database(e)) if e.is_unique_violation() => HttpResponse::Conflict()
             .json(json!({"error": "User with such username or email already exists"})),
         Err(e) => {

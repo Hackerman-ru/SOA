@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+
 use cdrs_tokio::cluster::session::{Session, SessionBuilder, TcpSessionBuilder};
 use cdrs_tokio::cluster::{NodeTcpConfigBuilder, PagerState, TcpConnectionManager};
 use cdrs_tokio::frame::TryFromRow;
@@ -13,6 +14,10 @@ use cdrs_tokio::query_values;
 use cdrs_tokio::transport::TransportTcp;
 use cdrs_tokio::types::CBytes;
 use cdrs_tokio::{IntoCdrsValue, TryFromRow};
+
+use rdkafka::config::ClientConfig;
+use rdkafka::producer::{FutureProducer, FutureRecord};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -25,14 +30,18 @@ mod posts {
 
 use posts::{
     post_service_server::{PostService, PostServiceServer},
-    CreatePostRequest, DeletePostRequest, DeletePostResponse, GetPostRequest, ListPostsRequest,
-    ListPostsResponse, Post, PostResponse, UpdatePostRequest,
+    Comment, CommentPostRequest, CommentPostResponse, CreatePostRequest, DeletePostRequest,
+    DeletePostResponse, GetCommentsRequest, GetCommentsResponse, GetPostRequest, LikePostRequest,
+    LikePostResponse, ListPostsRequest, ListPostsResponse, Post, PostResponse, UpdatePostRequest,
+    ViewPostRequest, ViewPostResponse,
 };
 
 #[derive(Debug, thiserror::Error)]
 pub enum PostError {
     #[error("Cassandra error: {0}")]
     CassandraError(String),
+    #[error("Kafka error: {0}")]
+    KafkaError(String),
     #[error("Post not found")]
     NotFound,
     #[error("Permission denied")]
@@ -47,6 +56,7 @@ impl From<PostError> for Status {
     fn from(err: PostError) -> Self {
         match err {
             PostError::CassandraError(msg) => Status::internal(msg),
+            PostError::KafkaError(msg) => Status::internal(msg),
             PostError::NotFound => Status::not_found("Post not found"),
             PostError::PermissionDenied => Status::permission_denied("Permission denied"),
             PostError::InvalidUuid => Status::invalid_argument("Invalid UUID"),
@@ -94,6 +104,125 @@ impl Clock for RealClock {
 }
 
 #[async_trait]
+pub trait KafkaProducer: Send + Sync {
+    async fn send_comment_event(
+        &self,
+        user_id: Uuid,
+        post_id: Uuid,
+        comment_id: Uuid,
+        timestamp: DateTime<Utc>,
+    ) -> Result<(), PostError>;
+    async fn send_view_event(
+        &self,
+        user_id: Uuid,
+        post_id: Uuid,
+        timestamp: DateTime<Utc>,
+    ) -> Result<(), PostError>;
+    async fn send_like_event(
+        &self,
+        user_id: Uuid,
+        post_id: Uuid,
+        timestamp: DateTime<Utc>,
+    ) -> Result<(), PostError>;
+}
+
+pub struct RdKafkaProducer {
+    producer: FutureProducer,
+}
+
+impl RdKafkaProducer {
+    pub fn new(brokers: &str) -> Result<Self, PostError> {
+        let producer = ClientConfig::new()
+            .set("bootstrap.servers", brokers)
+            .create()
+            .map_err(|e| PostError::KafkaError(e.to_string()))?;
+
+        Ok(Self { producer })
+    }
+}
+
+#[async_trait]
+impl KafkaProducer for RdKafkaProducer {
+    async fn send_comment_event(
+        &self,
+        user_id: Uuid,
+        post_id: Uuid,
+        comment_id: Uuid,
+        timestamp: DateTime<Utc>,
+    ) -> Result<(), PostError> {
+        let event = serde_json::json!({
+            "user_id": user_id.to_string(),
+            "post_id": post_id.to_string(),
+            "comment_id": comment_id.to_string(),
+            "timestamp": timestamp.to_rfc3339()
+        });
+
+        let event_str = event.to_string();
+        let user_id_str = user_id.to_string();
+        let record = FutureRecord::to("comment")
+            .payload(&event_str)
+            .key(&user_id_str);
+
+        self.producer
+            .send(record, Duration::from_secs(3))
+            .await
+            .map_err(|(e, _)| PostError::KafkaError(e.to_string()))?;
+
+        Ok(())
+    }
+    async fn send_view_event(
+        &self,
+        user_id: Uuid,
+        post_id: Uuid,
+        timestamp: DateTime<Utc>,
+    ) -> Result<(), PostError> {
+        let event = serde_json::json!({
+            "user_id": user_id.to_string(),
+            "post_id": post_id.to_string(),
+            "timestamp": timestamp.to_rfc3339()
+        });
+
+        let event_str = event.to_string();
+        let user_id_str = user_id.to_string();
+        let record = FutureRecord::to("view")
+            .payload(&event_str)
+            .key(&user_id_str);
+
+        self.producer
+            .send(record, Duration::from_secs(3))
+            .await
+            .map_err(|(e, _)| PostError::KafkaError(e.to_string()))?;
+
+        Ok(())
+    }
+    async fn send_like_event(
+        &self,
+        user_id: Uuid,
+        post_id: Uuid,
+        timestamp: DateTime<Utc>,
+    ) -> Result<(), PostError> {
+        let event = serde_json::json!({
+            "user_id": user_id.to_string(),
+            "post_id": post_id.to_string(),
+            "timestamp": timestamp.to_rfc3339()
+        });
+
+        let event_str = event.to_string();
+        let user_id_str = user_id.to_string();
+        let record = FutureRecord::to("like")
+            .payload(&event_str)
+            .key(&user_id_str);
+
+        self.producer
+            .send(record, Duration::from_secs(3))
+            .await
+            .map_err(|(e, _)| PostError::KafkaError(e.to_string()))?;
+
+        Ok(())
+    }
+}
+
+#[async_trait]
 pub trait CassandraClient: Send + Sync {
     async fn query(&self, query: &str) -> Result<(), PostError>;
     async fn query_with_values(&self, query: &str, values: QueryValues) -> Result<(), PostError>;
@@ -103,13 +232,20 @@ pub trait CassandraClient: Send + Sync {
         query: &str,
         values: QueryValues,
     ) -> Result<Vec<DbPost>, PostError>;
-    async fn query_paged(
+    async fn query_paged_db_posts(
         &self,
         query: &str,
         values: QueryValues,
         page_size: i32,
         paging_state: Option<Vec<u8>>,
     ) -> Result<(Vec<DbPost>, Option<Vec<u8>>), PostError>;
+    async fn query_paged_db_comments(
+        &self,
+        query: &str,
+        values: QueryValues,
+        page_size: i32,
+        paging_state: Option<Vec<u8>>,
+    ) -> Result<(Vec<DbComment>, Option<Vec<u8>>), PostError>;
 }
 
 #[derive(Debug, Clone)]
@@ -123,11 +259,25 @@ pub struct CassandraSession {
     >,
 }
 
-fn parse_rows(rows: Vec<cdrs_tokio::types::rows::Row>) -> Result<Vec<DbPost>, PostError> {
+fn parse_rows_into_db_posts(
+    rows: Vec<cdrs_tokio::types::rows::Row>,
+) -> Result<Vec<DbPost>, PostError> {
     let mut result = Vec::with_capacity(rows.len());
     for row in rows {
         let post =
             DbPost::try_from_row(row).map_err(|e| PostError::CassandraError(e.to_string()))?;
+        result.push(post);
+    }
+    Ok(result)
+}
+
+fn parse_rows_into_db_comments(
+    rows: Vec<cdrs_tokio::types::rows::Row>,
+) -> Result<Vec<DbComment>, PostError> {
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        let post =
+            DbComment::try_from_row(row).map_err(|e| PostError::CassandraError(e.to_string()))?;
         result.push(post);
     }
     Ok(result)
@@ -162,7 +312,7 @@ impl CassandraClient for CassandraSession {
             .into_rows()
             .unwrap_or_default();
 
-        parse_rows(rows)
+        parse_rows_into_db_posts(rows)
     }
 
     async fn query_with_values_and_get_db_posts(
@@ -180,10 +330,10 @@ impl CassandraClient for CassandraSession {
             .into_rows()
             .unwrap_or_default();
 
-        parse_rows(rows)
+        parse_rows_into_db_posts(rows)
     }
 
-    async fn query_paged(
+    async fn query_paged_db_posts(
         &self,
         query: &str,
         values: QueryValues,
@@ -216,7 +366,43 @@ impl CassandraClient for CassandraSession {
             false => None,
         };
 
-        Ok((parse_rows(rows)?, next_paging_state))
+        Ok((parse_rows_into_db_posts(rows)?, next_paging_state))
+    }
+
+    async fn query_paged_db_comments(
+        &self,
+        query: &str,
+        values: QueryValues,
+        page_size: i32,
+        paging_state: Option<Vec<u8>>,
+    ) -> Result<(Vec<DbComment>, Option<Vec<u8>>), PostError> {
+        let mut pager = self.session.paged(page_size);
+
+        let state = match paging_state {
+            Some(state) => PagerState::new_with_cursor(CBytes::new(state)),
+            None => PagerState::new(),
+        };
+        let query_params = QueryParamsBuilder::new()
+            .with_page_size(page_size)
+            .with_values(values)
+            .build();
+
+        let mut query_pager = pager.query_with_pager_state_params(query, state, query_params);
+
+        let rows = query_pager
+            .next()
+            .await
+            .map_err(|e| PostError::CassandraError(e.to_string()))?;
+
+        let next_paging_state = match query_pager.has_more() {
+            true => query_pager
+                .into_pager_state()
+                .into_cursor()
+                .and_then(|c| c.into_bytes()),
+            false => None,
+        };
+
+        Ok((parse_rows_into_db_comments(rows)?, next_paging_state))
     }
 }
 
@@ -264,13 +450,27 @@ impl CassandraSession {
             )
         "#;
 
+        let create_comments_table = r#"
+        CREATE TABLE IF NOT EXISTS post_service.post_comments (
+            id UUID,
+            post_id UUID,
+            user_id UUID,
+            text TEXT,
+            created_at TIMESTAMP,
+            PRIMARY KEY ((post_id), created_at, id)
+        ) WITH CLUSTERING ORDER BY (created_at DESC)
+    "#;
+
         self.session
             .query(create_keyspace)
             .await
             .map_err(|e| PostError::CassandraError(e.to_string()))?;
-
         self.session
             .query(create_table)
+            .await
+            .map_err(|e| PostError::CassandraError(e.to_string()))?;
+        self.session
+            .query(create_comments_table)
             .await
             .map_err(|e| PostError::CassandraError(e.to_string()))?;
 
@@ -283,6 +483,7 @@ pub struct PostServiceImpl {
     cassandra: Arc<dyn CassandraClient>,
     clock: Arc<dyn Clock>,
     generator: Arc<dyn Generator>,
+    kafka_producer: Arc<dyn KafkaProducer>,
 }
 
 impl PostServiceImpl {
@@ -290,11 +491,13 @@ impl PostServiceImpl {
         cassandra: Arc<dyn CassandraClient>,
         clock: Arc<dyn Clock>,
         generator: Arc<dyn Generator>,
+        kafka_producer: Arc<dyn KafkaProducer>,
     ) -> Self {
         Self {
             cassandra,
             clock,
             generator,
+            kafka_producer,
         }
     }
 
@@ -488,30 +691,140 @@ impl PostService for PostServiceImpl {
 
         let (db_posts, next_paging_state) = self
             .cassandra
-            .query_paged(&query, values, page_size, paging_state)
+            .query_paged_db_posts(&query, values, page_size, paging_state)
             .await?;
+
+        let posts = db_posts.into_iter().map(Post::from).collect();
 
         let next_page_token = next_paging_state
             .map(|b| BASE64_STANDARD.encode(b))
             .unwrap_or_default();
-
-        let posts = db_posts.into_iter().map(Post::from).collect();
 
         Ok(Response::new(ListPostsResponse {
             posts,
             next_page_token,
         }))
     }
+
+    async fn comment_post(
+        &self,
+        request: Request<CommentPostRequest>,
+    ) -> Result<Response<CommentPostResponse>, Status> {
+        let req = request.into_inner();
+        let post_id = Uuid::parse_str(&req.post_id).map_err(|_| PostError::InvalidUuid)?;
+        let user_id = Uuid::parse_str(&req.user_id).map_err(|_| PostError::InvalidUuid)?;
+        let id = self.generator.new_v4();
+        let now = self.clock.now();
+
+        let db_comment = DbComment {
+            id,
+            post_id,
+            user_id,
+            text: req.text,
+            created_at: now,
+        };
+
+        let query = "INSERT INTO post_service.post_comments (id, post_id, user_id, text, created_at) VALUES (?, ?, ?, ?, ?)";
+        self.cassandra
+            .query_with_values(
+                query,
+                query_values!(
+                    db_comment.id,
+                    db_comment.post_id,
+                    db_comment.user_id,
+                    db_comment.text.clone(),
+                    db_comment.created_at
+                ),
+            )
+            .await?;
+
+        self.kafka_producer
+            .send_comment_event(user_id, post_id, db_comment.id, now)
+            .await?;
+
+        Ok(Response::new(CommentPostResponse {
+            comment: Some(db_comment.into()),
+        }))
+    }
+
+    async fn get_comments(
+        &self,
+        request: Request<GetCommentsRequest>,
+    ) -> Result<Response<GetCommentsResponse>, Status> {
+        let req = request.into_inner();
+        let post_id = Uuid::parse_str(&req.post_id).map_err(|_| PostError::InvalidUuid)?;
+
+        let query = "SELECT * FROM post_service.post_comments WHERE post_id = ?";
+        let page_size = req.page_size.clamp(1, 100);
+        let paging_state = match req.page_token.is_empty() {
+            false => Some(
+                BASE64_STANDARD
+                    .decode(&req.page_token)
+                    .map_err(|_| PostError::InvalidPageToken)?,
+            ),
+            true => None,
+        };
+
+        let (db_comments, next_paging_state) = self
+            .cassandra
+            .query_paged_db_comments(query, query_values!(post_id), page_size, paging_state)
+            .await?;
+
+        let comments = db_comments.into_iter().map(Comment::from).collect();
+
+        let next_page_token = next_paging_state
+            .map(|b| BASE64_STANDARD.encode(b))
+            .unwrap_or_default();
+
+        Ok(Response::new(GetCommentsResponse {
+            comments,
+            next_page_token,
+        }))
+    }
+
+    async fn view_post(
+        &self,
+        request: Request<ViewPostRequest>,
+    ) -> Result<Response<ViewPostResponse>, Status> {
+        let req = request.into_inner();
+        let post_id = Uuid::parse_str(&req.post_id).map_err(|_| PostError::InvalidUuid)?;
+        let user_id = Uuid::parse_str(&req.user_id).map_err(|_| PostError::InvalidUuid)?;
+        let now = self.clock.now();
+
+        let _ = self.get_post_by_id(post_id, Some(user_id)).await?;
+        self.kafka_producer
+            .send_view_event(user_id, post_id, now)
+            .await?;
+        Ok(Response::new(ViewPostResponse { success: true }))
+    }
+
+    async fn like_post(
+        &self,
+        request: Request<LikePostRequest>,
+    ) -> Result<Response<LikePostResponse>, Status> {
+        let req = request.into_inner();
+        let post_id = Uuid::parse_str(&req.post_id).map_err(|_| PostError::InvalidUuid)?;
+        let user_id = Uuid::parse_str(&req.user_id).map_err(|_| PostError::InvalidUuid)?;
+        let now = self.clock.now();
+
+        let _ = self.get_post_by_id(post_id, Some(user_id)).await?;
+        self.kafka_producer
+            .send_like_event(user_id, post_id, now)
+            .await?;
+        Ok(Response::new(LikePostResponse { success: true }))
+    }
 }
 
 pub async fn create_server(
     cassandra: CassandraSession,
+    kafka_producer: RdKafkaProducer,
 ) -> Result<PostServiceServer<PostServiceImpl>, PostError> {
     cassandra.create_schema().await?;
     Ok(PostServiceServer::new(PostServiceImpl::new(
         Arc::new(cassandra),
         Arc::new(RealClock::new()),
         Arc::new(UuidGenerator::new()),
+        Arc::new(kafka_producer),
     )))
 }
 
@@ -567,6 +880,42 @@ impl Post {
     }
 }
 
+#[derive(Clone, Debug, IntoCdrsValue, TryFromRow, PartialEq)]
+pub struct DbComment {
+    id: Uuid,
+    post_id: Uuid,
+    user_id: Uuid,
+    text: String,
+    created_at: DateTime<Utc>,
+}
+
+impl From<DbComment> for Comment {
+    fn from(db_comment: DbComment) -> Self {
+        Comment {
+            id: db_comment.id.to_string(),
+            post_id: db_comment.post_id.to_string(),
+            user_id: db_comment.user_id.to_string(),
+            text: db_comment.text,
+            created_at: db_comment.created_at.to_rfc3339(),
+        }
+    }
+}
+
+impl TryFrom<Comment> for DbComment {
+    type Error = PostError;
+
+    fn try_from(comment: Comment) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: Uuid::parse_str(&comment.id).map_err(|_| PostError::InvalidUuid)?,
+            post_id: Uuid::parse_str(&comment.post_id).map_err(|_| PostError::InvalidUuid)?,
+            user_id: Uuid::parse_str(&comment.user_id).map_err(|_| PostError::InvalidUuid)?,
+            text: comment.text,
+            created_at: DateTime::from_str(&comment.created_at)
+                .map_err(|_| PostError::CassandraError("Invalid created_at".to_string()))?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -607,6 +956,32 @@ mod tests {
     }
 
     mock! {
+        pub KafkaProducerImpl {}
+        #[async_trait]
+        impl KafkaProducer for KafkaProducerImpl {
+            async fn send_comment_event(
+                &self,
+                user_id: Uuid,
+                post_id: Uuid,
+                comment_id: Uuid,
+                timestamp: DateTime<Utc>,
+            ) -> Result<(), PostError>;
+            async fn send_view_event(
+                &self,
+                user_id: Uuid,
+                post_id: Uuid,
+                timestamp: DateTime<Utc>,
+            ) -> Result<(), PostError>;
+            async fn send_like_event(
+                &self,
+                user_id: Uuid,
+                post_id: Uuid,
+                timestamp: DateTime<Utc>,
+            ) -> Result<(), PostError>;
+        }
+    }
+
+    mock! {
         pub CassandraClientImpl {}
         #[async_trait]
         impl CassandraClient for CassandraClientImpl {
@@ -618,13 +993,20 @@ mod tests {
                 query: &str,
                 values: QueryValues,
             ) -> Result<Vec<DbPost>, PostError>;
-            async fn query_paged(
+            async fn query_paged_db_posts(
                 &self,
                 query: &str,
                 values: QueryValues,
                 page_size: i32,
                 paging_state: Option<Vec<u8>>,
             ) -> Result<(Vec<DbPost>, Option<Vec<u8>>), PostError>;
+            async fn query_paged_db_comments(
+                &self,
+                query: &str,
+                values: QueryValues,
+                page_size: i32,
+                paging_state: Option<Vec<u8>>,
+            ) -> Result<(Vec<DbComment>, Option<Vec<u8>>), PostError>;
         }
     }
 
@@ -646,8 +1028,11 @@ mod tests {
         mock_cassandra: MockCassandraClientImpl,
         mock_clock: MockClock,
         mock_generator: MockGenerator,
+        mock_kafka: MockKafkaProducerImpl,
         test_post: Post,
         db_post: DbPost,
+        test_comment: Comment,
+        db_comment: DbComment,
     }
 
     impl MockData {
@@ -657,14 +1042,26 @@ mod tests {
             let mock_cassandra = MockCassandraClientImpl::new();
             let mock_clock = MockClock::new(fixed_time);
             let mock_generator = MockGenerator::new(fixed_uuid);
+            let mock_kafka = MockKafkaProducerImpl::new();
             let test_post = create_test_post(fixed_uuid, fixed_time);
             let db_post = DbPost::try_from(test_post.clone()).unwrap();
+            let test_comment = Comment {
+                id: fixed_uuid.to_string(),
+                post_id: fixed_uuid.to_string(),
+                user_id: fixed_uuid.to_string(),
+                text: "Test comment".into(),
+                created_at: fixed_time.to_rfc3339(),
+            };
+            let db_comment = DbComment::try_from(test_comment.clone()).unwrap();
             Self {
                 mock_cassandra,
                 mock_clock,
                 mock_generator,
+                mock_kafka,
                 test_post,
                 db_post,
+                test_comment,
+                db_comment,
             }
         }
     }
@@ -708,6 +1105,7 @@ mod tests {
             Arc::new(data.mock_cassandra),
             Arc::new(data.mock_clock),
             Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
         );
         let response = service.create_post(request).await.unwrap();
         assert!(response.into_inner().post.is_some());
@@ -730,6 +1128,7 @@ mod tests {
             Arc::new(data.mock_cassandra),
             Arc::new(data.mock_clock),
             Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
         );
         let request = Request::new(GetPostRequest {
             id: data.test_post.id.clone(),
@@ -754,6 +1153,7 @@ mod tests {
             Arc::new(data.mock_cassandra),
             Arc::new(data.mock_clock),
             Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
         );
         let request = Request::new(GetPostRequest {
             id: data.test_post.id.clone(),
@@ -775,12 +1175,10 @@ mod tests {
         let updated_at = data.db_post.updated_at;
         let id = data.db_post.id;
 
-        // Mock get_post
         data.mock_cassandra
             .expect_query_with_values_and_get_db_posts()
             .returning(move |_, _| Ok(vec![data.db_post.clone()]));
 
-        // Mock update query
         data.mock_cassandra
             .expect_query_with_values()
             .with(
@@ -800,6 +1198,7 @@ mod tests {
             Arc::new(data.mock_cassandra),
             Arc::new(data.mock_clock),
             Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
         );
         let request = Request::new(UpdatePostRequest {
             id: data.test_post.id.clone(),
@@ -821,12 +1220,10 @@ mod tests {
         let mut data = MockData::new();
         let id = data.db_post.id;
 
-        // Mock get_post
         data.mock_cassandra
             .expect_query_with_values_and_get_db_posts()
             .returning(move |_, _| Ok(vec![data.db_post.clone()]));
 
-        // Mock delete query
         data.mock_cassandra
             .expect_query_with_values()
             .with(
@@ -839,6 +1236,7 @@ mod tests {
             Arc::new(data.mock_cassandra),
             Arc::new(data.mock_clock),
             Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
         );
         let request = Request::new(DeletePostRequest {
             id: data.test_post.id.clone(),
@@ -857,7 +1255,7 @@ mod tests {
         let encoded_paging_state = BASE64_STANDARD.encode(paging_state.clone().unwrap());
 
         data.mock_cassandra
-            .expect_query_paged()
+            .expect_query_paged_db_posts()
             .with(
                 eq("SELECT * FROM post_service.posts WHERE is_private = false ALLOW FILTERING"),
                 eq(query_values!()),
@@ -870,6 +1268,7 @@ mod tests {
             Arc::new(data.mock_cassandra),
             Arc::new(data.mock_clock),
             Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
         );
         let request = Request::new(ListPostsRequest {
             user_id: data.test_post.creator_id,
@@ -891,7 +1290,7 @@ mod tests {
         let encoded_paging_state = BASE64_STANDARD.encode(paging_state.clone().unwrap());
 
         data.mock_cassandra
-            .expect_query_paged()
+            .expect_query_paged_db_posts()
             .with(
                 eq("SELECT * FROM post_service.posts WHERE is_private = false AND tags CONTAINS ? ALLOW FILTERING"),
                 eq(query_values!("test".to_string())),
@@ -904,6 +1303,7 @@ mod tests {
             Arc::new(data.mock_cassandra),
             Arc::new(data.mock_clock),
             Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
         );
         let request = Request::new(ListPostsRequest {
             user_id: data.test_post.creator_id,
@@ -915,6 +1315,192 @@ mod tests {
         let response = service.list_posts(request).await.unwrap().into_inner();
         assert_eq!(response.posts.len(), 1);
         assert_eq!(response.next_page_token, encoded_paging_state);
+    }
+
+    #[tokio::test]
+    async fn test_comment_post_success() {
+        let mut data = MockData::new();
+
+        data.mock_kafka
+            .expect_send_comment_event()
+            .with(
+                eq(data.db_comment.user_id),
+                eq(data.db_comment.post_id),
+                eq(data.db_comment.id),
+                eq(data.db_comment.created_at),
+            )
+            .times(1)
+            .returning(|_, _, _, _| Ok(()));
+
+        data.mock_cassandra
+        .expect_query_with_values()
+        .with(
+            eq("INSERT INTO post_service.post_comments (id, post_id, user_id, text, created_at) VALUES (?, ?, ?, ?, ?)"),
+            eq(query_values!(
+                data.db_comment.id,
+                data.db_comment.post_id,
+                data.db_comment.user_id,
+                data.db_comment.text.clone(),
+                data.db_comment.created_at
+            )),
+        )
+        .returning(|_, _| Ok(()));
+
+        let service = PostServiceImpl::new(
+            Arc::new(data.mock_cassandra),
+            Arc::new(data.mock_clock),
+            Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
+        );
+
+        let request = Request::new(CommentPostRequest {
+            post_id: data.test_comment.post_id.clone(),
+            user_id: data.test_comment.user_id.clone(),
+            text: data.test_comment.text.clone(),
+        });
+
+        let response = service.comment_post(request).await.unwrap();
+        assert!(response.into_inner().comment.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_comments_success() {
+        let mut data = MockData::new();
+
+        data.mock_cassandra
+            .expect_query_paged_db_comments()
+            .with(
+                eq("SELECT * FROM post_service.post_comments WHERE post_id = ?"),
+                eq(query_values!(data.db_comment.post_id)),
+                eq(100),
+                eq(None),
+            )
+            .returning(move |_, _, _, _| Ok((vec![data.db_comment.clone()], None)));
+
+        let service = PostServiceImpl::new(
+            Arc::new(data.mock_cassandra),
+            Arc::new(data.mock_clock),
+            Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
+        );
+
+        let request = Request::new(GetCommentsRequest {
+            post_id: data.test_comment.post_id.clone(),
+            user_id: data.test_comment.user_id.clone(),
+            page_size: 100,
+            page_token: "".into(),
+        });
+
+        let response = service.get_comments(request).await.unwrap();
+        assert_eq!(response.into_inner().comments.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_comment_post_kafka_error() {
+        let mut data = MockData::new();
+
+        data.mock_kafka
+            .expect_send_comment_event()
+            .times(1)
+            .returning(|_, _, _, _| Err(PostError::KafkaError("Kafka error".to_string())));
+
+        data.mock_cassandra
+            .expect_query_with_values()
+            .with(
+                eq("INSERT INTO post_service.post_comments (id, post_id, user_id, text, created_at) VALUES (?, ?, ?, ?, ?)"),
+                eq(query_values!(
+                    data.db_comment.id,
+                    data.db_comment.post_id,
+                    data.db_comment.user_id,
+                    data.db_comment.text.clone(),
+                    data.db_comment.created_at
+                )),
+            )
+            .returning(|_, _| Ok(()));
+
+        let service = PostServiceImpl::new(
+            Arc::new(data.mock_cassandra),
+            Arc::new(data.mock_clock),
+            Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
+        );
+
+        let request = Request::new(CommentPostRequest {
+            post_id: data.test_comment.post_id.clone(),
+            user_id: data.test_comment.user_id.clone(),
+            text: data.test_comment.text.clone(),
+        });
+
+        let response = service.comment_post(request).await;
+        assert_eq!(response.unwrap_err().code(), Code::Internal);
+    }
+
+    #[tokio::test]
+    async fn test_like_post_success() {
+        let mut data = MockData::new();
+
+        data.mock_kafka
+            .expect_send_like_event()
+            .with(
+                eq(data.db_comment.user_id),
+                eq(data.db_comment.post_id),
+                eq(data.db_comment.created_at),
+            )
+            .times(1)
+            .returning(|_, _, _| Ok(()));
+
+        data.mock_cassandra
+            .expect_query_with_values_and_get_db_posts()
+            .returning(move |_, _| Ok(vec![data.db_post.clone()]));
+
+        let service = PostServiceImpl::new(
+            Arc::new(data.mock_cassandra),
+            Arc::new(data.mock_clock),
+            Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
+        );
+
+        let request = Request::new(LikePostRequest {
+            post_id: data.test_comment.post_id.clone(),
+            user_id: data.test_comment.user_id.clone(),
+        });
+
+        let response = service.like_post(request).await.unwrap();
+        assert!(response.into_inner().success);
+    }
+
+    #[tokio::test]
+    async fn test_view_post_success() {
+        let mut data = MockData::new();
+
+        data.mock_kafka
+            .expect_send_view_event()
+            .with(
+                eq(data.db_comment.user_id),
+                eq(data.db_comment.post_id),
+                eq(data.db_comment.created_at),
+            )
+            .times(1)
+            .returning(|_, _, _| Ok(()));
+
+        data.mock_cassandra
+            .expect_query_with_values_and_get_db_posts()
+            .returning(move |_, _| Ok(vec![data.db_post.clone()]));
+
+        let service = PostServiceImpl::new(
+            Arc::new(data.mock_cassandra),
+            Arc::new(data.mock_clock),
+            Arc::new(data.mock_generator),
+            Arc::new(data.mock_kafka),
+        );
+
+        let request = Request::new(ViewPostRequest {
+            post_id: data.test_comment.post_id.clone(),
+            user_id: data.test_comment.user_id.clone(),
+        });
+
+        let response = service.view_post(request).await.unwrap();
+        assert!(response.into_inner().success);
     }
 
     #[test]

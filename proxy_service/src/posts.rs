@@ -79,6 +79,84 @@ pub struct PostResponse {
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ViewPostRequest {
+    #[prost(string, tag = "1")]
+    pub post_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub user_id: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct ViewPostResponse {
+    #[prost(bool, tag = "1")]
+    pub success: bool,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LikePostRequest {
+    #[prost(string, tag = "1")]
+    pub post_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub user_id: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct LikePostResponse {
+    #[prost(bool, tag = "1")]
+    pub success: bool,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CommentPostRequest {
+    #[prost(string, tag = "1")]
+    pub post_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub user_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub text: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CommentPostResponse {
+    #[prost(message, optional, tag = "1")]
+    pub comment: ::core::option::Option<Comment>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetCommentsRequest {
+    #[prost(string, tag = "1")]
+    pub post_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub user_id: ::prost::alloc::string::String,
+    #[prost(int32, tag = "3")]
+    pub page_size: i32,
+    #[prost(string, tag = "4")]
+    pub page_token: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetCommentsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub comments: ::prost::alloc::vec::Vec<Comment>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Comment {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub post_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub user_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub text: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub created_at: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Post {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
@@ -298,6 +376,102 @@ pub mod post_service_client {
                 .insert(GrpcMethod::new("posts.PostService", "ListPosts"));
             self.inner.unary(req, path, codec).await
         }
+        pub async fn comment_post(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CommentPostRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::CommentPostResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/posts.PostService/CommentPost",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("posts.PostService", "CommentPost"));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn get_comments(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetCommentsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetCommentsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/posts.PostService/GetComments",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("posts.PostService", "GetComments"));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn view_post(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ViewPostRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ViewPostResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/posts.PostService/ViewPost",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("posts.PostService", "ViewPost"));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn like_post(
+            &mut self,
+            request: impl tonic::IntoRequest<super::LikePostRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::LikePostResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/posts.PostService/LikePost",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("posts.PostService", "LikePost"));
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -337,6 +511,34 @@ pub mod post_service_server {
             request: tonic::Request<super::ListPostsRequest>,
         ) -> std::result::Result<
             tonic::Response<super::ListPostsResponse>,
+            tonic::Status,
+        >;
+        async fn comment_post(
+            &self,
+            request: tonic::Request<super::CommentPostRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::CommentPostResponse>,
+            tonic::Status,
+        >;
+        async fn get_comments(
+            &self,
+            request: tonic::Request<super::GetCommentsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetCommentsResponse>,
+            tonic::Status,
+        >;
+        async fn view_post(
+            &self,
+            request: tonic::Request<super::ViewPostRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ViewPostResponse>,
+            tonic::Status,
+        >;
+        async fn like_post(
+            &self,
+            request: tonic::Request<super::LikePostRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::LikePostResponse>,
             tonic::Status,
         >;
     }
@@ -626,6 +828,186 @@ pub mod post_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ListPostsSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/posts.PostService/CommentPost" => {
+                    #[allow(non_camel_case_types)]
+                    struct CommentPostSvc<T: PostService>(pub Arc<T>);
+                    impl<
+                        T: PostService,
+                    > tonic::server::UnaryService<super::CommentPostRequest>
+                    for CommentPostSvc<T> {
+                        type Response = super::CommentPostResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CommentPostRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PostService>::comment_post(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CommentPostSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/posts.PostService/GetComments" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetCommentsSvc<T: PostService>(pub Arc<T>);
+                    impl<
+                        T: PostService,
+                    > tonic::server::UnaryService<super::GetCommentsRequest>
+                    for GetCommentsSvc<T> {
+                        type Response = super::GetCommentsResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetCommentsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PostService>::get_comments(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetCommentsSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/posts.PostService/ViewPost" => {
+                    #[allow(non_camel_case_types)]
+                    struct ViewPostSvc<T: PostService>(pub Arc<T>);
+                    impl<
+                        T: PostService,
+                    > tonic::server::UnaryService<super::ViewPostRequest>
+                    for ViewPostSvc<T> {
+                        type Response = super::ViewPostResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ViewPostRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PostService>::view_post(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ViewPostSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/posts.PostService/LikePost" => {
+                    #[allow(non_camel_case_types)]
+                    struct LikePostSvc<T: PostService>(pub Arc<T>);
+                    impl<
+                        T: PostService,
+                    > tonic::server::UnaryService<super::LikePostRequest>
+                    for LikePostSvc<T> {
+                        type Response = super::LikePostResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::LikePostRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PostService>::like_post(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = LikePostSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

@@ -61,4 +61,38 @@ impl PostService {
             .await
             .map(|r| r.into_inner())
     }
+
+    pub async fn comment_post(
+        &mut self,
+        request: CommentPostRequest,
+    ) -> Result<CommentPostResponse, Status> {
+        self.client
+            .comment_post(request)
+            .await
+            .map(|r| r.into_inner())
+    }
+
+    pub async fn get_comments(
+        &mut self,
+        request: GetCommentsRequest,
+    ) -> Result<GetCommentsResponse, Status> {
+        self.client
+            .get_comments(request)
+            .await
+            .map(|r| r.into_inner())
+    }
+
+    pub async fn like_post(
+        &mut self,
+        request: LikePostRequest,
+    ) -> Result<LikePostResponse, Status> {
+        self.client.like_post(request).await.map(|r| r.into_inner())
+    }
+
+    pub async fn view_post(
+        &mut self,
+        request: ViewPostRequest,
+    ) -> Result<ViewPostResponse, Status> {
+        self.client.view_post(request).await.map(|r| r.into_inner())
+    }
 }
