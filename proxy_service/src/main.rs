@@ -3,12 +3,17 @@ use std::path::PathBuf;
 use actix_web::{App, HttpServer, web};
 use clap::Parser;
 use post_service::PostService;
+use reaction_service::ReactionService;
 use server_data::ServerData;
 
 mod handlers;
 mod post_service;
 mod posts {
     include!("posts.rs");
+}
+mod reaction_service;
+mod reactions {
+    include!("reactions.rs");
 }
 mod routes;
 mod server_data;
@@ -20,6 +25,9 @@ pub struct Args {
     /// URL to post-service
     #[arg(long)]
     post: String,
+    /// URL to reaction-service
+    #[arg(long)]
+    reaction: String,
     /// URL to user-service
     #[arg(long)]
     user: String,
@@ -35,12 +43,14 @@ pub struct Args {
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
     let post_service = web::Data::new(PostService::new(args.post).await.unwrap());
+    let reaction_service = web::Data::new(ReactionService::new(args.reaction).await.unwrap());
     let server_data = web::Data::new(ServerData::new(args.user, args.public).await);
 
     println!("Running proxy-service on 0.0.0.0:{}", args.port);
 
     HttpServer::new(move || {
         App::new()
+            .app_data(reaction_service.clone())
             .app_data(post_service.clone())
             .app_data(server_data.clone())
             .configure(routes::init_routes)

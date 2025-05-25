@@ -73,10 +73,11 @@ services:
     build: ./proxy_service
     volumes:
       - ./user_service/signature.pub:/tmp/signature.pub
-    command: ["--post", "http://post_service:8082","--user", "http://user_service:8081", "--public", "/tmp/signature.pub", "--port", "8080"]
+    command: ["--post", "http://post_service:8082","--reaction", "http://reaction_service:8084", "--user", "http://user_service:8081", "--public", "/tmp/signature.pub", "--port", "8080"]
     depends_on:
       - user_service
       - post_service
+      - reaction_service
       - kafka
     ports:
       - "8080:8080"
@@ -113,12 +114,81 @@ services:
     networks:
       - kafka_network
 
+  clickhouse:
+    image: 'clickhouse/clickhouse-server:${CHVER:-latest}'
+    user: '101:101'
+    container_name: clickhouse
+    hostname: clickhouse
+    volumes:
+      - ./reaction_service/clickhouse/clickhouse-server/config.d/config.xml:/etc/clickhouse-server/config.d/config.xml
+      - ./reaction_service/clickhouse/clickhouse-server/users.d/users.xml:/etc/clickhouse-server/users.d/users.xml
+      - ./reaction_service/clickhouse/initdb.d:/docker-entrypoint-initdb.d
+    ports:
+      - '8123:8123'
+      - '9000:9000'
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/?query=SELECT%201 || exit 1
+    networks:
+      - reaction_network
+
+  kafka-connect:
+    image: confluentinc/cp-kafka-connect:7.5.1
+    hostname: kafka-connect
+    depends_on:
+      - kafka
+      - clickhouse
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: "kafka:9093"
+      CONNECT_GROUP_ID: "clickhouse-connect"
+      CONNECT_CONFIG_STORAGE_TOPIC: "_connect-configs"
+      CONNECT_OFFSET_STORAGE_TOPIC: "_connect-offsets"
+      CONNECT_STATUS_STORAGE_TOPIC: "_connect-status"
+      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.storage.StringConverter"
+      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components,/usr/share/java/clickhouse-kafka-connect"
+      CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+    volumes:
+      - ./reaction_service/kafka-connect/clickhouse-plugin:/usr/share/java/clickhouse-kafka-connect
+      - ./reaction_service/kafka-connect/init-connectors.sh:/init-connectors.sh
+    command:
+      - bash 
+      - -c 
+      - |
+        /etc/confluent/docker/run &
+        while ! curl -s http://localhost:8083/connectors >/dev/null; do 
+          echo "Waiting for Kafka Connect API..."
+          sleep 10
+        done
+        /init-connectors.sh
+        wait
+    networks:
+      - kafka_network
+      - reaction_network
+
+  reaction_service:
+    build: ./reaction_service
+    command: ["--clickhouse", "http://clickhouse:8123", "--port", "8084"]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - "8084:8084"
+    networks:
+      - reaction_network
+      - proxy_network
+      - kafka_network
+
 volumes:
   postgres_data:
   cassandra_data:
+  clickhouse-jdbc:
 
 networks:
   auth_network:
+  reaction_network:
   post_network:
   proxy_network:
   kafka_network:

@@ -1,15 +1,15 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 
 use cdrs_tokio::cluster::session::{Session, SessionBuilder, TcpSessionBuilder};
 use cdrs_tokio::cluster::{NodeTcpConfigBuilder, PagerState, TcpConnectionManager};
 use cdrs_tokio::frame::TryFromRow;
 use cdrs_tokio::load_balancing::RoundRobinLoadBalancingStrategy;
-use cdrs_tokio::query::query_values::QueryValues;
 use cdrs_tokio::query::QueryParamsBuilder;
+use cdrs_tokio::query::query_values::QueryValues;
 use cdrs_tokio::query_values;
 use cdrs_tokio::transport::TransportTcp;
 use cdrs_tokio::types::CBytes;
@@ -29,11 +29,11 @@ mod posts {
 }
 
 use posts::{
-    post_service_server::{PostService, PostServiceServer},
     Comment, CommentPostRequest, CommentPostResponse, CreatePostRequest, DeletePostRequest,
     DeletePostResponse, GetCommentsRequest, GetCommentsResponse, GetPostRequest, LikePostRequest,
     LikePostResponse, ListPostsRequest, ListPostsResponse, Post, PostResponse, UpdatePostRequest,
     ViewPostRequest, ViewPostResponse,
+    post_service_server::{PostService, PostServiceServer},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -107,21 +107,23 @@ impl Clock for RealClock {
 pub trait KafkaProducer: Send + Sync {
     async fn send_comment_event(
         &self,
-        user_id: Uuid,
+        creator_id: Uuid,
         post_id: Uuid,
-        comment_id: Uuid,
+        user_id: Uuid,
         timestamp: DateTime<Utc>,
     ) -> Result<(), PostError>;
     async fn send_view_event(
         &self,
-        user_id: Uuid,
+        creator_id: Uuid,
         post_id: Uuid,
+        user_id: Uuid,
         timestamp: DateTime<Utc>,
     ) -> Result<(), PostError>;
     async fn send_like_event(
         &self,
-        user_id: Uuid,
+        creator_id: Uuid,
         post_id: Uuid,
+        user_id: Uuid,
         timestamp: DateTime<Utc>,
     ) -> Result<(), PostError>;
 }
@@ -139,86 +141,70 @@ impl RdKafkaProducer {
 
         Ok(Self { producer })
     }
+
+    async fn send_event(
+        &self,
+        topic: &str,
+        creator_id: Uuid,
+        post_id: Uuid,
+        user_id: Uuid,
+        timestamp: DateTime<Utc>,
+    ) -> Result<(), PostError> {
+        let event = serde_json::json!({
+            "creator_id": creator_id.to_string(),
+            "post_id": post_id.to_string(),
+            "user_id": user_id.to_string(),
+            "timestamp": timestamp.timestamp().to_string()
+        });
+
+        let event_str = event.to_string();
+        let user_id_str = user_id.to_string();
+        let record = FutureRecord::to(topic)
+            .payload(&event_str)
+            .key(&user_id_str);
+
+        self.producer
+            .send(record, Duration::from_secs(5))
+            .await
+            .map_err(|(e, _)| PostError::KafkaError(e.to_string()))?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl KafkaProducer for RdKafkaProducer {
     async fn send_comment_event(
         &self,
-        user_id: Uuid,
+        creator_id: Uuid,
         post_id: Uuid,
-        comment_id: Uuid,
+        user_id: Uuid,
         timestamp: DateTime<Utc>,
     ) -> Result<(), PostError> {
-        let event = serde_json::json!({
-            "user_id": user_id.to_string(),
-            "post_id": post_id.to_string(),
-            "comment_id": comment_id.to_string(),
-            "timestamp": timestamp.to_rfc3339()
-        });
-
-        let event_str = event.to_string();
-        let user_id_str = user_id.to_string();
-        let record = FutureRecord::to("comment")
-            .payload(&event_str)
-            .key(&user_id_str);
-
-        self.producer
-            .send(record, Duration::from_secs(3))
+        self.send_event("post-comment", creator_id, post_id, user_id, timestamp)
             .await
-            .map_err(|(e, _)| PostError::KafkaError(e.to_string()))?;
-
-        Ok(())
     }
+
     async fn send_view_event(
         &self,
-        user_id: Uuid,
+        creator_id: Uuid,
         post_id: Uuid,
+        user_id: Uuid,
         timestamp: DateTime<Utc>,
     ) -> Result<(), PostError> {
-        let event = serde_json::json!({
-            "user_id": user_id.to_string(),
-            "post_id": post_id.to_string(),
-            "timestamp": timestamp.to_rfc3339()
-        });
-
-        let event_str = event.to_string();
-        let user_id_str = user_id.to_string();
-        let record = FutureRecord::to("view")
-            .payload(&event_str)
-            .key(&user_id_str);
-
-        self.producer
-            .send(record, Duration::from_secs(3))
+        self.send_event("post-view", creator_id, post_id, user_id, timestamp)
             .await
-            .map_err(|(e, _)| PostError::KafkaError(e.to_string()))?;
-
-        Ok(())
     }
+
     async fn send_like_event(
         &self,
-        user_id: Uuid,
+        creator_id: Uuid,
         post_id: Uuid,
+        user_id: Uuid,
         timestamp: DateTime<Utc>,
     ) -> Result<(), PostError> {
-        let event = serde_json::json!({
-            "user_id": user_id.to_string(),
-            "post_id": post_id.to_string(),
-            "timestamp": timestamp.to_rfc3339()
-        });
-
-        let event_str = event.to_string();
-        let user_id_str = user_id.to_string();
-        let record = FutureRecord::to("like")
-            .payload(&event_str)
-            .key(&user_id_str);
-
-        self.producer
-            .send(record, Duration::from_secs(3))
+        self.send_event("post-like", creator_id, post_id, user_id, timestamp)
             .await
-            .map_err(|(e, _)| PostError::KafkaError(e.to_string()))?;
-
-        Ok(())
     }
 }
 
@@ -713,6 +699,8 @@ impl PostService for PostServiceImpl {
         let req = request.into_inner();
         let post_id = Uuid::parse_str(&req.post_id).map_err(|_| PostError::InvalidUuid)?;
         let user_id = Uuid::parse_str(&req.user_id).map_err(|_| PostError::InvalidUuid)?;
+        let post = self.get_post_by_id(post_id, Some(user_id)).await?;
+        let creator_id = Uuid::parse_str(&post.creator_id).map_err(|_| PostError::InvalidUuid)?;
         let id = self.generator.new_v4();
         let now = self.clock.now();
 
@@ -738,9 +726,11 @@ impl PostService for PostServiceImpl {
             )
             .await?;
 
-        self.kafka_producer
-            .send_comment_event(user_id, post_id, db_comment.id, now)
-            .await?;
+        if !post.is_private {
+            self.kafka_producer
+                .send_comment_event(creator_id, post_id, user_id, now)
+                .await?;
+        }
 
         Ok(Response::new(CommentPostResponse {
             comment: Some(db_comment.into()),
@@ -753,6 +743,8 @@ impl PostService for PostServiceImpl {
     ) -> Result<Response<GetCommentsResponse>, Status> {
         let req = request.into_inner();
         let post_id = Uuid::parse_str(&req.post_id).map_err(|_| PostError::InvalidUuid)?;
+        let user_id = Uuid::parse_str(&req.user_id).map_err(|_| PostError::InvalidUuid)?;
+        let _ = self.get_post_by_id(post_id, Some(user_id)).await?;
 
         let query = "SELECT * FROM post_service.post_comments WHERE post_id = ?";
         let page_size = req.page_size.clamp(1, 100);
@@ -789,12 +781,16 @@ impl PostService for PostServiceImpl {
         let req = request.into_inner();
         let post_id = Uuid::parse_str(&req.post_id).map_err(|_| PostError::InvalidUuid)?;
         let user_id = Uuid::parse_str(&req.user_id).map_err(|_| PostError::InvalidUuid)?;
+        let post = self.get_post_by_id(post_id, Some(user_id)).await?;
+        let creator_id = Uuid::parse_str(&post.creator_id).map_err(|_| PostError::InvalidUuid)?;
         let now = self.clock.now();
 
-        let _ = self.get_post_by_id(post_id, Some(user_id)).await?;
-        self.kafka_producer
-            .send_view_event(user_id, post_id, now)
-            .await?;
+        if !post.is_private {
+            self.kafka_producer
+                .send_view_event(creator_id, post_id, user_id, now)
+                .await?;
+        }
+
         Ok(Response::new(ViewPostResponse { success: true }))
     }
 
@@ -805,12 +801,16 @@ impl PostService for PostServiceImpl {
         let req = request.into_inner();
         let post_id = Uuid::parse_str(&req.post_id).map_err(|_| PostError::InvalidUuid)?;
         let user_id = Uuid::parse_str(&req.user_id).map_err(|_| PostError::InvalidUuid)?;
+        let post = self.get_post_by_id(post_id, Some(user_id)).await?;
+        let creator_id = Uuid::parse_str(&post.creator_id).map_err(|_| PostError::InvalidUuid)?;
         let now = self.clock.now();
 
-        let _ = self.get_post_by_id(post_id, Some(user_id)).await?;
-        self.kafka_producer
-            .send_like_event(user_id, post_id, now)
-            .await?;
+        if !post.is_private {
+            self.kafka_producer
+                .send_like_event(creator_id, post_id, user_id, now)
+                .await?;
+        }
+
         Ok(Response::new(LikePostResponse { success: true }))
     }
 }
@@ -961,21 +961,23 @@ mod tests {
         impl KafkaProducer for KafkaProducerImpl {
             async fn send_comment_event(
                 &self,
-                user_id: Uuid,
+                creator_id: Uuid,
                 post_id: Uuid,
-                comment_id: Uuid,
+                user_id: Uuid,
                 timestamp: DateTime<Utc>,
             ) -> Result<(), PostError>;
             async fn send_view_event(
                 &self,
-                user_id: Uuid,
+                creator_id: Uuid,
                 post_id: Uuid,
+                user_id: Uuid,
                 timestamp: DateTime<Utc>,
             ) -> Result<(), PostError>;
             async fn send_like_event(
                 &self,
-                user_id: Uuid,
+                creator_id: Uuid,
                 post_id: Uuid,
+                user_id: Uuid,
                 timestamp: DateTime<Utc>,
             ) -> Result<(), PostError>;
         }
@@ -1016,7 +1018,7 @@ mod tests {
             id: uuid.to_string(),
             title: "Test Post".into(),
             description: "Test Description".into(),
-            creator_id: Uuid::new_v4().to_string(),
+            creator_id: uuid.to_string(),
             created_at: timestamp.clone(),
             updated_at: timestamp,
             is_private: false,
@@ -1324,13 +1326,21 @@ mod tests {
         data.mock_kafka
             .expect_send_comment_event()
             .with(
-                eq(data.db_comment.user_id),
+                eq(data.db_post.creator_id),
                 eq(data.db_comment.post_id),
-                eq(data.db_comment.id),
+                eq(data.db_comment.user_id),
                 eq(data.db_comment.created_at),
             )
             .times(1)
             .returning(|_, _, _, _| Ok(()));
+
+        data.mock_cassandra
+            .expect_query_with_values_and_get_db_posts()
+            .with(
+                eq("SELECT * FROM post_service.posts WHERE id = ?"),
+                eq(query_values!(data.db_comment.post_id)),
+            )
+            .returning(move |_, _| Ok(vec![data.db_post.clone()]));
 
         data.mock_cassandra
         .expect_query_with_values()
@@ -1366,6 +1376,14 @@ mod tests {
     #[tokio::test]
     async fn test_get_comments_success() {
         let mut data = MockData::new();
+
+        data.mock_cassandra
+            .expect_query_with_values_and_get_db_posts()
+            .with(
+                eq("SELECT * FROM post_service.posts WHERE id = ?"),
+                eq(query_values!(data.db_comment.post_id)),
+            )
+            .returning(move |_, _| Ok(vec![data.db_post.clone()]));
 
         data.mock_cassandra
             .expect_query_paged_db_comments()
@@ -1405,6 +1423,14 @@ mod tests {
             .returning(|_, _, _, _| Err(PostError::KafkaError("Kafka error".to_string())));
 
         data.mock_cassandra
+            .expect_query_with_values_and_get_db_posts()
+            .with(
+                eq("SELECT * FROM post_service.posts WHERE id = ?"),
+                eq(query_values!(data.db_comment.post_id)),
+            )
+            .returning(move |_, _| Ok(vec![data.db_post.clone()]));
+
+        data.mock_cassandra
             .expect_query_with_values()
             .with(
                 eq("INSERT INTO post_service.post_comments (id, post_id, user_id, text, created_at) VALUES (?, ?, ?, ?, ?)"),
@@ -1442,15 +1468,20 @@ mod tests {
         data.mock_kafka
             .expect_send_like_event()
             .with(
-                eq(data.db_comment.user_id),
+                eq(data.db_post.creator_id),
                 eq(data.db_comment.post_id),
+                eq(data.db_comment.user_id),
                 eq(data.db_comment.created_at),
             )
             .times(1)
-            .returning(|_, _, _| Ok(()));
+            .returning(|_, _, _, _| Ok(()));
 
         data.mock_cassandra
             .expect_query_with_values_and_get_db_posts()
+            .with(
+                eq("SELECT * FROM post_service.posts WHERE id = ?"),
+                eq(query_values!(data.db_comment.post_id)),
+            )
             .returning(move |_, _| Ok(vec![data.db_post.clone()]));
 
         let service = PostServiceImpl::new(
@@ -1476,15 +1507,20 @@ mod tests {
         data.mock_kafka
             .expect_send_view_event()
             .with(
-                eq(data.db_comment.user_id),
+                eq(data.db_post.creator_id),
                 eq(data.db_comment.post_id),
+                eq(data.db_comment.user_id),
                 eq(data.db_comment.created_at),
             )
             .times(1)
-            .returning(|_, _, _| Ok(()));
+            .returning(|_, _, _, _| Ok(()));
 
         data.mock_cassandra
             .expect_query_with_values_and_get_db_posts()
+            .with(
+                eq("SELECT * FROM post_service.posts WHERE id = ?"),
+                eq(query_values!(data.db_comment.post_id)),
+            )
             .returning(move |_, _| Ok(vec![data.db_post.clone()]));
 
         let service = PostServiceImpl::new(

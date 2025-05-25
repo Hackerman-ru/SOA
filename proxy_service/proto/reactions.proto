@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package reactions;
+
+service ReactionService {
+  rpc GetPostStats(PostRequest) returns (PostStatsResponse);
+  rpc GetViewDynamics(PostRequest) returns (TimeSeriesResponse);
+  rpc GetLikeDynamics(PostRequest) returns (TimeSeriesResponse);
+  rpc GetCommentDynamics(PostRequest) returns (TimeSeriesResponse);
+  rpc GetTopPosts(TopRequest) returns (TopPostsResponse);
+  rpc GetTopCreators(TopRequest) returns (TopUsersResponse);
+}
+
+message PostRequest { string post_id = 1; }
+
+message PostStatsResponse {
+  uint64 views = 1;
+  uint64 likes = 2;
+  uint64 comments = 3;
+}
+
+message TimeSeriesResponse { repeated TimePoint points = 1; }
+
+message TimePoint {
+  string date = 1;
+  uint64 count = 2;
+}
+
+message TopRequest {
+  enum Metric {
+    VIEWS = 0;
+    LIKES = 1;
+    COMMENTS = 2;
+  }
+  Metric metric = 1;
+}
+
+message TopPostsResponse { repeated PostStat posts = 1; }
+
+message PostStat {
+  string post_id = 1;
+  uint64 count = 2;
+}
+
+message TopUsersResponse { repeated UserStat users = 1; }
+
+message UserStat {
+  string user_id = 1;
+  uint64 count = 2;
+}
