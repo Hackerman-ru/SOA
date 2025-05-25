@@ -1,7 +1,8 @@
 use crate::{
     handlers::{
-        comment_post, create_post, delete_post, get_comments, get_post, like_post, list_posts,
-        update_post, view_post,
+        comment_post, create_post, delete_post, get_comment_dynamics, get_comments,
+        get_like_dynamics, get_post, get_post_stats, get_top_creators, get_top_posts,
+        get_view_dynamics, like_post, list_posts, update_post, view_post,
     },
     server_data::ServerData,
 };
@@ -57,6 +58,15 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
                     .route("/comments", web::get().to(get_comments))
                     .route("/like", web::post().to(like_post))
                     .route("/view", web::post().to(view_post)),
+            )
+            .service(
+                web::scope("/reaction")
+                    .route("/stats", web::get().to(get_post_stats))
+                    .route("/views_dynamic", web::get().to(get_view_dynamics))
+                    .route("/likes_dynamic", web::get().to(get_like_dynamics))
+                    .route("/comments_dynamic", web::get().to(get_comment_dynamics))
+                    .route("/top_posts", web::get().to(get_top_posts))
+                    .route("/top_creators", web::get().to(get_top_creators)),
             ),
     );
 }

@@ -1,5 +1,5 @@
 [package]
-name = "post_service"
+name = "reaction_service"
 version = "0.1.0"
 edition = "2024"
 
@@ -10,24 +10,12 @@ prost-types = "0.13"
 tokio = { version = "1.0", features = ["full"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 clap = {version = "4.5.23", features = ["derive"]}
-chrono = { version = "0.4", features = ["serde"] }
-cdrs-tokio = { version = "8.1.6", features = ["derive"] }
+clickhouse = { version = "0.13.2", features = ["uuid", "time", "chrono", "test-util"]}
+thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+chrono = "0.4"
 futures = "0.3"
-thiserror = "1.0"
-mockall = "0.11"
-async-trait = "0.1"
-base64 = "0.22.1"
-rdkafka = "0.37"
-
-[lib]
-name = "post_service_lib"
-path = "src/lib.rs"
-
-[[bin]]
-name = "post_service"
-path = "src/bin/server.rs"
 
 [build-dependencies]
 tonic-build = "*"

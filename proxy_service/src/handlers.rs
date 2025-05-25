@@ -1,4 +1,6 @@
 use crate::post_service::PostService;
+use crate::reaction_service::ReactionService;
+use crate::reactions::{PostRequest, TopRequest};
 use crate::{posts::*, server_data::ServerData};
 use actix_web::{HttpRequest, HttpResponse, Responder, web};
 use jsonwebtoken::{Validation, decode};
@@ -305,6 +307,90 @@ pub async fn view_post(
     let response = client.view_post(request).await;
     match response {
         Ok(response) => HttpResponse::Ok().json(json!({ "success": response.success })),
+        Err(status) => convert_err(status),
+    }
+}
+
+pub async fn get_post_stats(
+    reaction_service: web::Data<ReactionService>,
+    input: web::Json<PostRequest>,
+) -> impl Responder {
+    let request = input.into_inner();
+    let mut client = reaction_service.get_ref().clone();
+
+    let response = client.get_post_stats(request).await;
+    match response {
+        Ok(response) => HttpResponse::Ok().json(response),
+        Err(status) => convert_err(status),
+    }
+}
+
+pub async fn get_view_dynamics(
+    reaction_service: web::Data<ReactionService>,
+    input: web::Json<PostRequest>,
+) -> impl Responder {
+    let request = input.into_inner();
+    let mut client = reaction_service.get_ref().clone();
+
+    let response = client.get_view_dynamics(request).await;
+    match response {
+        Ok(response) => HttpResponse::Ok().json(response.points),
+        Err(status) => convert_err(status),
+    }
+}
+
+pub async fn get_like_dynamics(
+    reaction_service: web::Data<ReactionService>,
+    input: web::Json<PostRequest>,
+) -> impl Responder {
+    let request = input.into_inner();
+    let mut client = reaction_service.get_ref().clone();
+
+    let response = client.get_like_dynamics(request).await;
+    match response {
+        Ok(response) => HttpResponse::Ok().json(response.points),
+        Err(status) => convert_err(status),
+    }
+}
+
+pub async fn get_comment_dynamics(
+    reaction_service: web::Data<ReactionService>,
+    input: web::Json<PostRequest>,
+) -> impl Responder {
+    let request = input.into_inner();
+    let mut client = reaction_service.get_ref().clone();
+
+    let response = client.get_comment_dynamics(request).await;
+    match response {
+        Ok(response) => HttpResponse::Ok().json(response.points),
+        Err(status) => convert_err(status),
+    }
+}
+
+pub async fn get_top_posts(
+    reaction_service: web::Data<ReactionService>,
+    input: web::Json<TopRequest>,
+) -> impl Responder {
+    let request = input.into_inner();
+    let mut client = reaction_service.get_ref().clone();
+
+    let response = client.get_top_posts(request).await;
+    match response {
+        Ok(response) => HttpResponse::Ok().json(response.posts),
+        Err(status) => convert_err(status),
+    }
+}
+
+pub async fn get_top_creators(
+    reaction_service: web::Data<ReactionService>,
+    input: web::Json<TopRequest>,
+) -> impl Responder {
+    let request = input.into_inner();
+    let mut client = reaction_service.get_ref().clone();
+
+    let response = client.get_top_creators(request).await;
+    match response {
+        Ok(response) => HttpResponse::Ok().json(response.users),
         Err(status) => convert_err(status),
     }
 }

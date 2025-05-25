@@ -1,5 +1,5 @@
 # Используем официальный образ Rust для сборки
-FROM rust:1.85 AS builder
+FROM rust:1.87 AS builder
 
 # Устанавливаем рабочую директорию
 WORKDIR /usr/src/proxy_service

@@ -1,12 +1,10 @@
 fn main() {
-    let posts = "./proto/posts.proto";
-    let reactions = "./proto/reactions.proto";
+    let proto_file = "./proto/reactions.proto";
     tonic_build::configure()
         .build_server(true)
         .out_dir("./src")
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
-        .compile_protos(&[posts, reactions], &["."])
+        .compile_protos(&[proto_file], &["."])
         .unwrap_or_else(|e| panic!("protobuf compile error: {}", e));
-    println!("cargo:rerun-if-changed={}", posts);
-    println!("cargo:rerun-if-changed={}", reactions);
+    println!("cargo:rerun-if-changed={}", proto_file);
 }
