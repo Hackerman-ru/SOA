@@ -35,8 +35,5 @@ COPY --from=builder /usr/src/user_service/migrations ./migrations
 # Копируем .env файл (если нужно)
 COPY .env .
 
-# Указываем порт, который будет использовать приложение
-EXPOSE 8081
-
 # Команда для запуска приложения
 ENTRYPOINT ["./user_service"]
