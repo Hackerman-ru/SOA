@@ -28,8 +28,5 @@ RUN apt-get update && \
 # Копируем собранный бинарник из builder-образа
 COPY --from=builder /usr/src/proxy_service/target/release/proxy_service .
 
-# Указываем порт, который будет использовать приложение
-EXPOSE 8080
-
 # Команда для запуска приложения
 ENTRYPOINT ["./proxy_service"]

@@ -1,10 +1,12 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use actix_web::{App, HttpServer, web};
 use clap::Parser;
 use db::get_db_pool;
 use rdkafka::{ClientConfig, producer::FutureProducer};
 use server_data::Keys;
+
+use crate::handlers::KafkaProducer;
 
 mod db;
 mod handlers;
@@ -22,6 +24,9 @@ pub struct Args {
     /// Path to private key
     #[arg(short, long)]
     private: PathBuf,
+    /// URL to Postgres
+    #[arg(long)]
+    postgres: String,
     /// URL to kafka
     #[arg(long)]
     kafka: String,
@@ -33,12 +38,13 @@ pub struct Args {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
-    let db_pool = web::Data::new(get_db_pool().await);
+    let db_pool = web::Data::new(get_db_pool(&args.postgres).await);
     let kafka_producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &args.kafka)
         .create()
         .unwrap();
-    let kafka_producer = web::Data::new(kafka_producer);
+    let kafka: Arc<dyn KafkaProducer> = Arc::new(kafka_producer);
+    let kafka_producer = web::Data::from(kafka);
     let keys = web::Data::new(Keys::new(args.public, args.private).await);
 
     println!("Running user-service on 0.0.0.0:{}", args.port);

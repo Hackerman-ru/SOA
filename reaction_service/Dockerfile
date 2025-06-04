@@ -25,8 +25,5 @@ WORKDIR /app
 # Копируем собранный бинарник из builder-образа
 COPY --from=builder /usr/src/reaction_service/target/release/reaction_service .
 
-# Указываем порт, который будет использовать приложение
-EXPOSE 8084
-
 # Команда для запуска приложения
 ENTRYPOINT ["./reaction_service"]

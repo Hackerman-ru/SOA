@@ -1,19 +1,22 @@
 services:
-  test_db:
-    image: postgres:13
+  test-db:
+    image: postgres:latest
     environment:
-      POSTGRES_USER: test_username
-      POSTGRES_PASSWORD: test_password
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_pass
       POSTGRES_DB: test_user_db
-    volumes:
-      - test_postgres_data:/var/lib/postgresql/data:rw
-    ports:
-      - "5433:5432"
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -d test_user_db -U test_username" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    ports: ["5433:5432"]
 
-volumes:
-  test_postgres_data:
+  test-cassandra:
+    image: cassandra:latest
+    ports: ["9043:9042"]
+
+  test-kafka:
+    image: apache/kafka:latest
+    ports: ["9094:9092"]
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9094
+
+  test-clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports: ["8124:8123"]

@@ -1,6 +1,5 @@
-use dotenv::dotenv;
 use sqlx::{PgPool, Pool, Postgres, migrate::Migrator};
-use std::{env, path::Path};
+use std::path::Path;
 
 pub async fn apply_migrations(db_pool: &PgPool) -> Result<(), sqlx::Error> {
     let migrator = Migrator::new(Path::new("./migrations")).await?;
@@ -8,11 +7,8 @@ pub async fn apply_migrations(db_pool: &PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-pub async fn get_db_pool() -> Pool<Postgres> {
-    dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let db_pool = PgPool::connect(&database_url)
+pub async fn get_db_pool(url: &str) -> Pool<Postgres> {
+    let db_pool = PgPool::connect(url)
         .await
         .expect("Failed to connect to the database");
 
